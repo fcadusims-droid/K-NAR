@@ -41,15 +41,22 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - `RuleBasedDirector` — roteiro cru → metadados relativos por heurística (sem modelo).
 - `LlamaDirector` — o mesmo, com um LLM local pequeno (Qwen2.5-1.5B GGUF, CPU).
 
+**TTS (`k_nar/tts/`):**
+
+- `PiperTTSBackend` — voz **neural real** (Piper/onnx, CPU): fonemas, plosivas,
+  respiração, prosódia. Traduz rate/tensão relativos em prosódia do motor.
+- `CachingTTS` — cache em disco por conteúdo: iterar não re-sintetiza (0.40s → 0.01s).
+- `synthesize_all` — passagem 2 em paralelo (pool de threads).
+- `FormantTTSBackend` / `MockTTSBackend` — voz sintética / só-duração, para testes.
+
 **Camada DSP (`k_nar/render/`, requer `numpy` + `pedalboard`):**
 
-- `FormantTTSBackend` — voz sintética por formantes (não-verbal), para ouvir o ritmo.
 - `TrimmedTTS` — remove o padding de silêncio do TTS antes de medir a duração.
 - `TimelineRenderer` — materializa a EDL em áudio estéreo: fades anti-clique, snap do
   corte ao vale de energia, **crossfade equal-power** na interrupção, panning e **bus
   de reverb convolutivo** único por cena. Modos `naive`/`dry`/`full` para A/B.
 
-Ainda **não** existe: backend XTTS real (voz com palavras).
+Ainda **não** existe: forced alignment real e voz distinta por personagem.
 Ver "próximos passos" em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Rodar
@@ -68,6 +75,9 @@ python -m examples.render_scene
 # pipeline COMPLETO: roteiro cru -> Director -> Orquestrador -> audio
 python -m examples.direct_and_render                 # Director por regras
 python -m examples.direct_and_render examples/roteiro_exemplo.json --llm   # Director LLM
+
+# pipeline NEURAL: voz Piper real + cache + sintese paralela + diagnostico do snap
+python -m examples.render_neural
 
 # provas numericas: trim de padding + crossfade equal-power
 python -m examples.proof_dsp

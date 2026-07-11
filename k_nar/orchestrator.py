@@ -21,12 +21,17 @@ class Orquestrador:
         self.policy = policy or TimingPolicy()
 
     # ------------------------------------------------------------------ #
-    def render_scene(self, scene: Scene) -> Timeline:
-        """Roda as passagens 2 e 3 e devolve a linha de tempo da cena."""
+    def render_scene(self, scene: Scene,
+                     clips: dict[str, RenderedClip] | None = None) -> Timeline:
+        """Roda as passagens 2 e 3 e devolve a linha de tempo da cena.
+
+        `clips` pode ser pré-fornecido (ex.: sintetizado em paralelo/cache via
+        `tts.batch.synthesize_all`), evitando que a passagem 2 lenta bloqueie o
+        fluxo. Se omitido, sintetiza serialmente (comportamento padrão).
+        """
         # PASSAGEM 2 — síntese "seca" + medição da duração REAL de cada fala.
-        clips: dict[str, RenderedClip] = {
-            ev.id: self.tts.synthesize(ev) for ev in scene.events
-        }
+        if clips is None:
+            clips = {ev.id: self.tts.synthesize(ev) for ev in scene.events}
 
         # PASSAGEM 3 — alocação temporal.
         placements: list[Placement] = []

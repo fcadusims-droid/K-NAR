@@ -11,6 +11,11 @@ venv/
 *.mp3
 *.flac
 build_audio/
-models/
+.knar_cache/
+# pesos de modelo: reproduzidos por script, nunca versionados (GitHub limita 100MB)
 *.gguf
+*.onnx
+*.onnx.json
+models/**
+!models/README.md
 .DS_Store
