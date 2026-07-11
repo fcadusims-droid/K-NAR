@@ -13,9 +13,9 @@ dependencies = []
 
 [project.optional-dependencies]
 # Backends reais de TTS e o motor de DSP entram como EXTRAS, isolados do core.
-tts = []   # ex.: "TTS" (Coqui/XTTS) — preenchido quando plugarmos o backend real
-dsp = []   # ex.: "pedalboard", "pydub", "soundfile" — camada de render/ambiencia
-dev = ["pytest"]
+tts = []                         # ex.: "TTS" (Coqui/XTTS) — backend de voz real
+dsp = ["numpy>=1.24", "pedalboard>=0.9"]  # camada de render: sintese, mix, reverb
+dev = ["pytest", "numpy>=1.24", "pedalboard>=0.9"]
 
 [tool.setuptools.packages.find]
 include = ["k_nar*"]

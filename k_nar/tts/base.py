@@ -25,6 +25,10 @@ class RenderedClip:
     duration_ms: int          # duração REAL medida — quebra a dependência circular
     audio: bytes | None = None  # buffer WAV opcional; None no modo mock (só mede tempo)
     sample_rate: int = 24000
+    # Amostras de áudio mono (numpy float32 em [-1, 1]) quando o backend gera som.
+    # Anotado como `object` de propósito: o CORE não importa numpy; só a camada
+    # de render (que já depende de numpy) preenche/lê este campo.
+    samples: object | None = None
 
 
 @runtime_checkable

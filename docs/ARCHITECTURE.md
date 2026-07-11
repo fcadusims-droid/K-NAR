@@ -72,11 +72,40 @@ A solução é separar **intenção** de **alocação temporal** em duas passage
   renderer deve cortar/duckar a fala interrompida).
 - **`sobreposicao`** — fala simultânea; ninguém é cortado, as vozes coexistem.
 
+## Camada DSP (Environment) — implementada
+
+A EDL deixou de ser "puramente matemática": ela **carrega os envelopes de
+atenuação** decididos pelo Orquestrador (`fade_in_ms`, `fade_out_ms`,
+`cut_snap_window_ms`). O renderer só *aplica* — não adivinha curvas. Isso fecha o
+ponto cego do corte frio.
+
+| Módulo | Papel |
+|---|---|
+| `k_nar/render/dsp.py` | Fades raised-cosine (anti-clique), pan equal-power, **snap ao vale de energia**, convolução via FFT, normalização. |
+| `k_nar/render/impulse.py` | IR procedural por ambiência (o "eco metálico" da nave). |
+| `k_nar/render/voice.py` | `FormantTTSBackend`: voz sintética por formantes (não-verbal), determinística — alimenta timing e render com o mesmo áudio. |
+| `k_nar/render/renderer.py` | `TimelineRenderer`: EDL + clips → mix estéreo. Modos `naive`/`dry`/`full` para A/B. Master via pedalboard (passa-alta + limiter). |
+| `k_nar/schema.py` | Validador **estrito** do JSON do LLM (recusa fallback silencioso). |
+
+### Respostas às três críticas ao modelo matemático puro
+
+1. **Clique no corte frio** → o Orquestrador emite fades na EDL; o renderer aplica
+   fade raised-cosine em toda borda e no ponto de corte. Medido: o maior salto
+   amostra-a-amostra (o clique) cai ~18× do modo `naive` para o `dry`.
+2. **Loader tolerante é perigoso na fronteira com IA** → `schema.validate_scene`
+   recusa rótulos/tipos fora do contrato e lista todos os erros. O loader tolerante
+   continua para ergonomia/testes; a validação estrita é o portão de produção.
+3. **Guarda "400ms/35%" é fonética-cega** → `snap_to_valley` desliza o corte até o
+   vale de energia mais próximo (silêncio entre fonemas) dentro de uma janela de
+   tolerância decidida pela política. É um stand-in leve de *forced alignment*:
+   corte proporcional escolhido pelo Orquestrador + ajuste acústico fino no renderer.
+
 ## O que ainda NÃO existe (próximos passos)
 
-1. Backend XTTS real implementando `TTSBackend` (voz local, sem custo).
-2. Camada `Environment DSP`: reverb convolutivo por `ambiance` + panning por `pan`,
-   consumindo a `Timeline`.
-3. Camada de QA acústico (clipping, overlaps que engolem palavras-chave) — o método
-   `Timeline.overlaps()` já é a semente disso.
-4. O prompt/contrato do LLM que produz o JSON da PASSAGEM 1.
+1. Backend **XTTS real** implementando `TTSBackend` (voz local com palavras).
+   Aí `snap_to_valley` pode evoluir para forced alignment de verdade sobre os fonemas.
+2. **Crossfade equal-power** explícito em `sobreposicao` (hoje as vozes coexistem
+   somadas; falta a curva de igual potência na zona de sobreposição).
+3. QA acústico automatizado (detectar clipping, overlaps que engolem palavras) —
+   `Timeline.overlaps()` é a semente.
+4. O **prompt/contrato do LLM** que produz o JSON da PASSAGEM 1 (validado por `schema`).

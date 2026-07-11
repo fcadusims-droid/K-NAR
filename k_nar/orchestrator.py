@@ -44,12 +44,19 @@ class Orquestrador:
                 duration_ms=clip.duration_ms,
                 pan=ev.pan,
                 text=ev.text,
+                # Bordas: micro-fades anti-clique em toda fala.
+                fade_in_ms=self.policy.edge_fade_in_ms,
+                fade_out_ms=self.policy.edge_fade_out_ms,
             )
 
-            # Interrupção corta a fala ANTERIOR no ponto de entrada desta.
+            # Interrupção: esta fala SOBE sobre a cauda da anterior ("swell") e
+            # CORTA a anterior no ponto de entrada, com fade de corte + snap.
             if prev is not None and ev.entry.type == EntryType.INTERRUPTION:
+                placement.fade_in_ms = self.policy.interruption_swell_in_ms
                 if start_ms < prev.natural_end_ms:
                     prev.hard_cut_ms = start_ms
+                    prev.fade_out_ms = self.policy.interruption_fade_ms
+                    prev.cut_snap_window_ms = self.policy.cut_snap_window_ms
 
             placements.append(placement)
 

@@ -10,4 +10,5 @@ venv/
 *.wav
 *.mp3
 *.flac
+build_audio/
 .DS_Store
