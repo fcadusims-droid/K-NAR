@@ -41,10 +41,16 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - `RuleBasedDirector` — roteiro cru → metadados relativos por heurística (sem modelo).
 - `LlamaDirector` — o mesmo, com um LLM local pequeno (Qwen2.5-1.5B GGUF, CPU).
 
+**Expressividade (`k_nar/prosody.py`):**
+
+- `ProsodyPolicy` — a matriz que traduz tensão em manipuladores acústicos reais
+  (rate, pitch, variância, ganho). Fonte única lida pelo TTS e pelo Orquestrador,
+  para a emoção mover a onda, o corte e o mix juntos (o Piper é inerte à semântica).
+
 **TTS (`k_nar/tts/`):**
 
 - `PiperTTSBackend` — voz **neural real** (Piper/onnx, CPU): fonemas, plosivas,
-  respiração, prosódia. Traduz rate/tensão relativos em prosódia do motor.
+  respiração. Aplica a `ProsodyPolicy` (rate via `length_scale`, pitch por reamostragem).
 - `CachingTTS` — cache em disco por conteúdo: iterar não re-sintetiza (0.40s → 0.01s).
 - `synthesize_all` — passagem 2 em paralelo (pool de threads).
 - `FormantTTSBackend` / `MockTTSBackend` — voz sintética / só-duração, para testes.
@@ -77,10 +83,12 @@ python -m examples.direct_and_render                 # Director por regras
 python -m examples.direct_and_render examples/roteiro_exemplo.json --llm   # Director LLM
 
 # pipeline NEURAL: voz Piper real + cache + sintese paralela + diagnostico do snap
-python -m examples.render_neural
+python -m examples.render_neural                 # Director por regras
+python -m examples.render_neural roteiro.json --llm   # Director LLM (few-shot)
 
-# provas numericas: trim de padding + crossfade equal-power
+# provas: trim + crossfade | expressividade (mesma frase em 4 tensoes)
 python -m examples.proof_dsp
+python -m examples.proof_prosody
 
 # testes (core + DSP + Director; os de DSP pulam se numpy faltar)
 python -m unittest discover -s tests -v

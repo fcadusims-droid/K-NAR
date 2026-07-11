@@ -24,14 +24,33 @@ _TIPOS = {"sequencial", "interrupcao", "sobreposicao"}
 _PAUSAS = {"nenhuma", "curta", "media", "longa"}
 
 _SYSTEM = (
-    "Voce e um diretor de audio drama. Para a fala dada, classifique a performance. "
-    "Responda APENAS um JSON valido, sem texto extra, no formato:\n"
+    "Voce e um diretor de audio drama. Classifique a performance de UMA fala. "
+    "Responda APENAS um JSON valido, sem texto extra:\n"
     '{"tensao":"baixa|media|alta|extrema","tipo":"sequencial|interrupcao|sobreposicao",'
     '"agressividade":0.0,"pausa":"nenhuma|curta|media|longa"}\n'
-    "tensao = carga emocional. tipo = como a fala entra em relacao a anterior "
-    "(interrupcao = atropela a anterior). agressividade (0..1) so importa em "
-    "interrupcao/sobreposicao. pausa = silencio dramatico depois da fala."
+    "REGRA DE OURO DO CONTRASTE: a MAIORIA das falas e 'media' ou 'baixa'. "
+    "Uma cena inteira em 'alta' e monotona e falsa -- o drama vive do contraste. "
+    "Use 'alta' so em ameaca/confronto direto; 'extrema' SO em grito real (CAIXA ALTA, '!'). "
+    "Exposicao calma e reflexao = 'baixa'. Hesitacao ('...') = 'baixa' + pausa 'longa'. "
+    "agressividade (0..1) so importa em interrupcao: use 0.25-0.4 tipico, 0.6+ so em fuga total. "
+    "tipo 'interrupcao' so quando a fala atropela a anterior (replica ríspida e curta)."
 )
+
+# Poucos exemplos que ANCORAM a escala (contraste), calibrando o 1.5B contra a
+# tendencia de saturar tudo em "alta".
+_FEWSHOT = [
+    ('Fala atual: "Os registros indicam que a colonia foi abandonada ha ciclos."',
+     '{"tensao":"baixa","tipo":"sequencial","agressividade":0.0,"pausa":"media"}'),
+    ('Fala atual: "Voce tem certeza de que era essa a rota?"',
+     '{"tensao":"media","tipo":"sequencial","agressividade":0.0,"pausa":"media"}'),
+    ('Fala atual: "Eu... eu nao sei se consigo fazer isso..."',
+     '{"tensao":"baixa","tipo":"sequencial","agressividade":0.0,"pausa":"longa"}'),
+    ('Fala anterior: "Se abrirmos a comporta agora, todos a bordo..."\n'
+     'Fala atual: "Entao nao abra!"',
+     '{"tensao":"alta","tipo":"interrupcao","agressividade":0.35,"pausa":"curta"}'),
+    ('Fala atual: "CHEGA! EU NAO VOU REPETIR!"',
+     '{"tensao":"extrema","tipo":"sequencial","agressividade":0.0,"pausa":"curta"}'),
+]
 
 
 class LlamaDirector(BaseDirector):
@@ -71,12 +90,14 @@ class LlamaDirector(BaseDirector):
         return out
 
     def _ask(self, texto: str, prev_text: str | None, index: int) -> str:
+        messages = [{"role": "system", "content": _SYSTEM}]
+        for ex_user, ex_assistant in _FEWSHOT:  # ancora a escala de tensao
+            messages.append({"role": "user", "content": ex_user})
+            messages.append({"role": "assistant", "content": ex_assistant})
         ctx = f"Fala anterior: \"{prev_text}\"\n" if index > 0 and prev_text else ""
-        user = f"{ctx}Fala atual: \"{texto}\""
+        messages.append({"role": "user", "content": f"{ctx}Fala atual: \"{texto}\""})
         out = self.llm.create_chat_completion(
-            messages=[{"role": "system", "content": _SYSTEM},
-                      {"role": "user", "content": user}],
-            max_tokens=80, temperature=self.temperature,
+            messages=messages, max_tokens=80, temperature=self.temperature,
         )
         return out["choices"][0]["message"]["content"]
 

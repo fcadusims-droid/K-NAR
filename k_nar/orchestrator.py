@@ -11,14 +11,19 @@ produz áudio: devolve uma `Timeline` de dados puros, que o DSP renderiza depois
 from __future__ import annotations
 
 from k_nar.models import EntryType, Scene
+from k_nar.prosody import ProsodyPolicy
 from k_nar.timeline import Placement, Timeline, TimingPolicy
 from k_nar.tts.base import RenderedClip, TTSBackend
 
 
 class Orquestrador:
-    def __init__(self, tts: TTSBackend, policy: TimingPolicy | None = None):
+    def __init__(self, tts: TTSBackend, policy: TimingPolicy | None = None,
+                 prosody: ProsodyPolicy | None = None):
         self.tts = tts
         self.policy = policy or TimingPolicy()
+        # mesma matriz de prosódia do backend neural: o ganho de dinâmica na EDL
+        # fica consistente com o pitch/rate que o TTS já aplicou na onda.
+        self.prosody = prosody or ProsodyPolicy()
 
     # ------------------------------------------------------------------ #
     def render_scene(self, scene: Scene,
@@ -53,6 +58,10 @@ class Orquestrador:
                 fade_in_ms=self.policy.edge_fade_in_ms,
                 fade_out_ms=self.policy.edge_fade_out_ms,
                 entry_type=ev.entry.type.value,
+                # Dinâmica: ganho por tensão, coerente com o pitch/rate do TTS.
+                gain_db=self.prosody.resolve(
+                    ProsodyPolicy.tension_scalar(ev.voice.tension)
+                ).gain_db,
             )
 
             # Interrupção: esta fala SOBE sobre a cauda da anterior ("swell") e

@@ -145,6 +145,22 @@ def convolution_reverb(stereo: np.ndarray, ir: np.ndarray, wet: float) -> np.nda
     return out.astype(np.float32)
 
 
+def resample_linear(mono: np.ndarray, ratio: float) -> np.ndarray:
+    """Reamostra por interpolação linear para `ratio` = tamanho_saida/tamanho_entrada.
+
+    Base do pitch shift SEM phase vocoder: o Piper gera a fala mais lenta (via
+    length_scale), e reamostrar de volta ao tamanho-alvo sobe o pitch mantendo a
+    duração — aproveitando o time-stretch neural de alta qualidade do próprio motor.
+    """
+    n = len(mono)
+    if n == 0:
+        return mono
+    m = max(1, int(round(n * ratio)))
+    x_old = np.linspace(0.0, 1.0, n, dtype=np.float64)
+    x_new = np.linspace(0.0, 1.0, m, dtype=np.float64)
+    return np.interp(x_new, x_old, mono).astype(np.float32)
+
+
 def peak_normalize(stereo: np.ndarray, target: float = 0.89) -> np.ndarray:
     """Normaliza pelo pico (evita clipping). target ~ -1 dBFS."""
     peak = float(np.max(np.abs(stereo))) if stereo.size else 0.0
