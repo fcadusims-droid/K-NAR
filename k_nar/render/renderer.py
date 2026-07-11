@@ -89,6 +89,7 @@ class TimelineRenderer:
             fade_out = max(end - cut, self._ms(p.fade_out_ms))
             seg = dsp.apply_fades(seg, self._ms(p.fade_in_ms), fade_out,
                                   curve_in="cosine", curve_out="equal_power")
+            seg = seg * (10.0 ** (p.gain_db / 20.0))   # dinâmica: contraste de tensão
             return dsp.equal_power_pan(seg, p.pan)
 
         if mode == "naive":
@@ -98,6 +99,7 @@ class TimelineRenderer:
         curve_in = "equal_power" if p.entry_type in ("interrupcao", "sobreposicao") else "cosine"
         mono = dsp.apply_fades(mono, self._ms(p.fade_in_ms), self._ms(p.fade_out_ms),
                                curve_in=curve_in)
+        mono = mono * (10.0 ** (p.gain_db / 20.0))   # dinâmica: contraste de tensão
         return dsp.equal_power_pan(mono, p.pan)
 
     @staticmethod

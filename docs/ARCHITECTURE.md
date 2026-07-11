@@ -130,6 +130,41 @@ maioria (ex.: 3.9× → 0.18× num vale limpo, deslocando ~36ms), mas nem sempre
 vale bom (um caso ficou em 0.93×). Conclusão medida: o snap faz trabalho essencial,
 e o degrau final é forced alignment sobre fonemas reais. Ver `examples/render_neural.py`.
 
+## Mapeamento de Expressividade (implementado)
+
+O Piper é **emocionalmente inerte**: a onda que ele gera ignora a semântica da
+cena. Logo, a atuação não pode vir do motor — tem de ser sintetizada por nós, e de
+forma **consistente** entre síntese, corte e DSP (senão o áudio fica "descolado":
+corte agressivo sobre uma fala pronunciada plana).
+
+`k_nar/prosody.py::ProsodyPolicy` é a fonte única: um escalar de tensão (0..1) se
+abre em manipuladores acústicos reais. Como o Piper não tem *style embedding*
+zero-shot, a flutuação entra por 3 alavancas + 1 no DSP:
+
+| Alavanca | Onde | Efeito da tensão (medido, frase fixa) |
+|---|---|---|
+| `length_scale` (nativa Piper) | `tts/neural.py` | ritmo: baixa 3332ms → extrema 2720ms |
+| pitch por reamostragem | `tts/neural.py` + `dsp.resample_linear` | centroide 2486Hz → 2785Hz (mais agudo) |
+| `noise_w`/`noise_scale` (nativa) | `tts/neural.py` | variabilidade de entonação sob tensão |
+| ganho de dinâmica (dB) | `Placement.gain_db` → `renderer` | −3.5dB → +2.0dB (sussurro vs grito) |
+
+O **pitch shift sem phase vocoder**: sintetiza-se a fala mais lenta (`length_scale × p`)
+e reamostra-se de volta (`1/p`), subindo o pitch em `p` sem mudar a duração-alvo —
+aproveitando o time-stretch neural do próprio Piper. Bônus: um deslocamento fixo de
+pitch por personagem dá timbres distintos a partir de um modelo mono-locutor.
+
+**Consistência**: `PiperTTSBackend` e `Orquestrador` recebem a MESMA `ProsodyPolicy`.
+O pitch/rate que o TTS imprime na onda e o ganho que a EDL carrega vêm da mesma
+matriz — a emoção move a onda, o corte e o mix juntos.
+
+### Desachatar o Diretor
+
+O `LlamaDirector` saturava tudo em "alta" (1.5B tende ao extremo). O few-shot em
+`director/llama.py` ancora a escala com exemplos de contraste (exposição=baixa,
+hesitação=baixa+pausa longa, grito=extrema), instruindo que a maioria das falas é
+media/baixa. Resultado: variação real chega ao `schema` — pré-requisito para o
+Mapeamento de Expressividade ter o que traduzir.
+
 ## Refinamentos de DSP para o áudio neural (implementados)
 
 Preparam o terreno antes de plugar o XTTS, cuja saída é "caótica":
@@ -162,11 +197,10 @@ Preparam o terreno antes de plugar o XTTS, cuja saída é "caótica":
    por fronteiras de fonema reais (aligner externo tipo whisperx/MFA, ou um modelo
    Piper que exporte `phoneme_alignments`). É o degrau que o teste com áudio real
    apontou — o snap resolve a maioria mas não todos os cortes.
-2. **Voz distinta por personagem**: o Piper `faber-medium` é mono-locutor; hoje os
-   personagens diferem só por prosódia + pan. Falta um modelo por voz (ou XTTS com
-   clonagem) para timbres realmente diferentes.
+2. **Voz distinta por personagem** com modelo real por voz (o pitch por personagem
+   ajuda, mas não substitui timbres de modelos diferentes ou XTTS com clonagem).
 3. **Crossfade equal-power em `sobreposicao` longa** (hoje o equal-power cobre a
    costura de interrupção; na fala simultânea prolongada as vozes dependem do limiter).
 4. QA acústico automatizado (clipping, overlaps que engolem palavras).
-5. Afinar o prompt do `LlamaDirector` com few-shot (o 1.5B satura tudo em "alta") —
-   agora sim, calibrado contra a voz neural real, não contra o mock.
+5. Calibrar mais o `LlamaDirector`: o few-shot quebrou a saturação, mas o 1.5B ainda
+   subusa "baixa". Mais exemplos ou um modelo maior sharpeariam a escala.

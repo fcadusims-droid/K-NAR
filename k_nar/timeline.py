@@ -132,6 +132,8 @@ class Placement:
     entry_type: str = "sequencial"
     # Janela de crossfade equal-power (ms) — preenchida em interrupção/sobreposição.
     crossfade_ms: int = 0
+    # Ganho de dinâmica (dB) derivado da tensão — contraste sussurro/grito no mix.
+    gain_db: float = 0.0
 
     @property
     def end_ms(self) -> int:

@@ -23,7 +23,7 @@ from pathlib import Path
 
 import numpy as np
 
-from k_nar import Orquestrador, Scene, TimingPolicy
+from k_nar import Orquestrador, ProsodyPolicy, Scene, TimingPolicy
 from k_nar.director import RuleBasedDirector
 from k_nar.render.dsp import short_time_energy, snap_to_valley
 from k_nar.render.renderer import TimelineRenderer
@@ -33,22 +33,36 @@ from k_nar.tts.cache import CachingTTS
 from k_nar.tts.neural import PiperTTSBackend
 
 VOICE = "models/piper/pt_BR-faber-medium.onnx"
+MODEL = "models/qwen2.5-1.5b-instruct-q4_k_m.gguf"
 
 
 def _fmt(ms: int) -> str:
     return f"{ms / 1000:6.2f}s"
 
 
+def _director(use_llm: bool):
+    if use_llm and Path(MODEL).exists():
+        from k_nar.director.llama import LlamaDirector
+        print(f"[director] LLM local (few-shot): {Path(MODEL).name}")
+        return LlamaDirector(MODEL, n_threads=4)
+    print("[director] RuleBasedDirector")
+    return RuleBasedDirector()
+
+
 def main() -> None:
-    roteiro = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).parent / "roteiro_exemplo.json"
+    args = [a for a in sys.argv[1:] if a != "--llm"]
+    use_llm = "--llm" in sys.argv
+    roteiro = Path(args[0]) if args else Path(__file__).parent / "roteiro_exemplo.json"
     if not Path(VOICE).exists():
         print(f"voz Piper ausente: {VOICE}\nrode: scripts/download_piper.sh")
         return
 
-    scene = Scene.from_dict(RuleBasedDirector().direct(json.loads(roteiro.read_text("utf-8"))))
+    scene = Scene.from_dict(_director(use_llm).direct(json.loads(roteiro.read_text("utf-8"))))
 
-    # backend real, envolto em trim (padding neural) + cache (não re-sintetizar)
-    piper = PiperTTSBackend(VOICE)
+    # UMA matriz de prosódia compartilhada entre TTS (pitch/rate/variância) e
+    # Orquestrador (ganho de dinâmica) -> síntese e mix concordam, nada "descolado".
+    prosody = ProsodyPolicy()
+    piper = PiperTTSBackend(VOICE, prosody=prosody)
     backend = CachingTTS(TrimmedTTS(piper), cache_dir=".knar_cache")
     sr = piper.sr
     policy = TimingPolicy()
@@ -60,13 +74,14 @@ def main() -> None:
           f"(cache: {backend.hits} hits, {backend.misses} misses)")
 
     # PASSAGENS 3+4
-    timeline = Orquestrador(backend, policy).render_scene(scene, clips=clips)
+    timeline = Orquestrador(backend, policy, prosody=prosody).render_scene(scene, clips=clips)
     samples = {eid: c.samples for eid, c in clips.items()}
 
     print(f"\n--- TIMELINE ({_fmt(timeline.total_duration_ms)}) ---")
     for p in timeline.placements:
         cut = "  [CORTADA]" if p.hard_cut_ms is not None else ""
-        print(f"  {_fmt(p.start_ms)} {_fmt(p.end_ms)} pan={p.pan:>4} {p.character:<8}{cut}")
+        print(f"  {_fmt(p.start_ms)} {_fmt(p.end_ms)} pan={p.pan:>4} gain={p.gain_db:>5.1f}dB "
+              f"{p.character:<8}{cut}")
 
     _diagnostico_snap(timeline, samples, sr, policy)
 
