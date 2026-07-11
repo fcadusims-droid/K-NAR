@@ -15,27 +15,69 @@ from __future__ import annotations
 import numpy as np
 
 
-def raised_cosine_window(n: int, rising: bool) -> np.ndarray:
-    """Rampa suave 0->1 (ou 1->0) de `n` amostras. Sem descontinuidade de derivada
-    nas pontas => sem clique."""
+def fade_window(n: int, rising: bool, curve: str = "cosine") -> np.ndarray:
+    """Rampa 0->1 (ou 1->0) de `n` amostras.
+
+    curve="cosine": raised-cosine (Hann) — anti-clique nas bordas.
+    curve="equal_power": sin/cos — para CROSSFADE entre fontes descorrelacionadas
+    (vozes diferentes): garante g_out^2 + g_in^2 = 1 => potência acústica somada
+    constante, sem estouro nem cancelamento na sobreposição.
+    """
     if n <= 1:
         return np.ones(max(n, 0), dtype=np.float32)
     t = np.linspace(0.0, 1.0, n, dtype=np.float32)
-    w = 0.5 * (1.0 - np.cos(np.pi * t))  # 0 -> 1, suave
-    return w if rising else w[::-1].copy()
+    if curve == "equal_power":
+        w = np.sin(t * (np.pi / 2.0))          # 0->1, sin (potência constante)
+    else:
+        w = 0.5 * (1.0 - np.cos(np.pi * t))    # 0->1, raised-cosine
+    return w.astype(np.float32) if rising else w[::-1].copy()
 
 
-def apply_fades(mono: np.ndarray, fade_in: int, fade_out: int) -> np.ndarray:
-    """Aplica micro-fades nas bordas (in-place numa cópia). Anti-clique."""
+# retrocompat: nome antigo
+def raised_cosine_window(n: int, rising: bool) -> np.ndarray:
+    return fade_window(n, rising, "cosine")
+
+
+def apply_fades(mono: np.ndarray, fade_in: int, fade_out: int,
+                curve_in: str = "cosine", curve_out: str = "cosine") -> np.ndarray:
+    """Aplica fades nas bordas (in-place numa cópia). `curve_*` escolhe a lei da
+    rampa: 'cosine' (anti-clique) ou 'equal_power' (crossfade)."""
     out = mono.astype(np.float32, copy=True)
     n = len(out)
     fi = int(min(max(fade_in, 0), n))
     fo = int(min(max(fade_out, 0), n))
     if fi > 1:
-        out[:fi] *= raised_cosine_window(fi, rising=True)
+        out[:fi] *= fade_window(fi, rising=True, curve=curve_in)
     if fo > 1:
-        out[n - fo:] *= raised_cosine_window(fo, rising=False)
+        out[n - fo:] *= fade_window(fo, rising=False, curve=curve_out)
     return out
+
+
+def trim_silence(mono: np.ndarray, threshold_db: float = -45.0,
+                 keep_ms: float = 8.0, sr: int = 24000) -> tuple[np.ndarray, int, int]:
+    """Remove silêncio (padding) do INÍCIO e FIM do áudio retornado pelo TTS.
+
+    Motores neurais (XTTS, VALL-E, ...) injetam silêncio residual variável nas
+    bordas. Se esse tempo morto entrar na linha de tempo, ele (a) corrompe o
+    cálculo proporcional da interrupção e (b) faz o `snap_to_valley` travar no
+    silêncio artificial em vez do vale entre fonemas. Este trim garante que a
+    duração MEDIDA seja estritamente a da fala.
+
+    Mantém `keep_ms` de folga em cada lado (evita cortar o ataque/decay da fala).
+    Devolve (áudio_trimado, amostras_removidas_inicio, amostras_removidas_fim).
+    """
+    n = len(mono)
+    if n == 0:
+        return mono, 0, 0
+    thresh = 10.0 ** (threshold_db / 20.0)
+    env = np.abs(mono.astype(np.float32))
+    above = np.where(env > thresh)[0]
+    if len(above) == 0:
+        return mono[:0], 0, n  # tudo silêncio
+    keep = int(keep_ms * sr / 1000.0)
+    start = max(0, int(above[0]) - keep)
+    end = min(n, int(above[-1]) + 1 + keep)
+    return mono[start:end].astype(np.float32), start, n - end
 
 
 def short_time_energy(mono: np.ndarray, win: int) -> np.ndarray:

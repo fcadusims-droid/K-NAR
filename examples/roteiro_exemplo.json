@@ -1,0 +1,11 @@
+{
+  "cena_id": "confronto_ponte",
+  "ambientacao": "cockpit_metalico_eco",
+  "falas": [
+    { "personagem": "Alien A", "texto": "Se ativarmos o nucleo, condenamos a frota inteira..." },
+    { "personagem": "Alien B", "texto": "Voce teme o inevitavel!" },
+    { "personagem": "Alien A", "texto": "Nao e medo. E a diferenca entre um comandante e um carrasco." },
+    { "personagem": "Alien B", "texto": "CHEGA! O tempo dos covardes acabou!" },
+    { "personagem": "Alien A", "texto": "Entao que o sangue caia sobre as suas maos, nao sobre as minhas." }
+  ]
+}

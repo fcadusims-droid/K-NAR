@@ -11,4 +11,6 @@ venv/
 *.mp3
 *.flac
 build_audio/
+models/
+*.gguf
 .DS_Store

@@ -36,27 +36,43 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - `Timeline` — a Edit Decision List que o DSP consome.
 - `schema.validate_scene` — validação **estrita** do JSON do LLM (recusa fallback silencioso).
 
+**Camada Director (`k_nar/director/`) — PASSAGEM 1:**
+
+- `RuleBasedDirector` — roteiro cru → metadados relativos por heurística (sem modelo).
+- `LlamaDirector` — o mesmo, com um LLM local pequeno (Qwen2.5-1.5B GGUF, CPU).
+
 **Camada DSP (`k_nar/render/`, requer `numpy` + `pedalboard`):**
 
 - `FormantTTSBackend` — voz sintética por formantes (não-verbal), para ouvir o ritmo.
+- `TrimmedTTS` — remove o padding de silêncio do TTS antes de medir a duração.
 - `TimelineRenderer` — materializa a EDL em áudio estéreo: fades anti-clique, snap do
-  corte ao vale de energia, panning equal-power e **bus de reverb convolutivo** único
-  por cena (coesão acústica). Modos `naive`/`dry`/`full` para A/B.
+  corte ao vale de energia, **crossfade equal-power** na interrupção, panning e **bus
+  de reverb convolutivo** único por cena. Modos `naive`/`dry`/`full` para A/B.
 
-Ainda **não** existe: backend XTTS real (voz com palavras) e o prompt do LLM.
+Ainda **não** existe: backend XTTS real (voz com palavras).
 Ver "próximos passos" em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Rodar
 
 ```bash
-# demo do core: imprime a linha de tempo (sem dependencias)
+# core: imprime a linha de tempo (sem dependencias)
 python -m examples.run_mvp
 
-# gerar AUDIO: 3 versoes da cena (naive / dry / full) em build_audio/
-pip install numpy pedalboard
+# instalar deps de DSP (e opcionalmente o LLM local)
+scripts/setup.sh            # numpy + pedalboard
+scripts/setup.sh --llm      # + llama-cpp-python + baixa o modelo (~1.1GB)
+
+# gerar AUDIO da cena (naive / dry / full) em build_audio/
 python -m examples.render_scene
 
-# testes (core + DSP; os de DSP pulam se numpy faltar)
+# pipeline COMPLETO: roteiro cru -> Director -> Orquestrador -> audio
+python -m examples.direct_and_render                 # Director por regras
+python -m examples.direct_and_render examples/roteiro_exemplo.json --llm   # Director LLM
+
+# provas numericas: trim de padding + crossfade equal-power
+python -m examples.proof_dsp
+
+# testes (core + DSP + Director; os de DSP pulam se numpy faltar)
 python -m unittest discover -s tests -v
 ```
 

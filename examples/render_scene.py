@@ -20,6 +20,7 @@ from pathlib import Path
 
 from k_nar import Orquestrador, Scene, TimingPolicy
 from k_nar.render.renderer import TimelineRenderer
+from k_nar.render.trim import TrimmedTTS
 from k_nar.render.voice import FormantTTSBackend
 
 SR = 24000
@@ -38,8 +39,10 @@ def main() -> None:
     scene = Scene.from_dict(json.loads(scene_path.read_text(encoding="utf-8")))
     policy = TimingPolicy()
 
-    # UM backend: alimenta timing (passagem 2) e render com o MESMO áudio (memoizado).
-    backend = FormantTTSBackend(sr=SR)
+    # UM backend, envolto em TrimmedTTS: remove padding de silêncio antes de medir
+    # a duração (protege timing + snap quando o motor for neural). Memoizado, então
+    # timing (passagem 2) e render usam exatamente o mesmo áudio.
+    backend = TrimmedTTS(FormantTTSBackend(sr=SR))
     timeline = Orquestrador(backend, policy).render_scene(scene)
     clips = {ev.id: backend.synthesize(ev).samples for ev in scene.events}
 

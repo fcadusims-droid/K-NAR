@@ -47,16 +47,23 @@ class Orquestrador:
                 # Bordas: micro-fades anti-clique em toda fala.
                 fade_in_ms=self.policy.edge_fade_in_ms,
                 fade_out_ms=self.policy.edge_fade_out_ms,
+                entry_type=ev.entry.type.value,
             )
 
             # Interrupção: esta fala SOBE sobre a cauda da anterior ("swell") e
-            # CORTA a anterior no ponto de entrada, com fade de corte + snap.
+            # CORTA a anterior no ponto de entrada, com crossfade equal-power + snap.
             if prev is not None and ev.entry.type == EntryType.INTERRUPTION:
                 placement.fade_in_ms = self.policy.interruption_swell_in_ms
+                placement.crossfade_ms = self.policy.crossfade_ms
                 if start_ms < prev.natural_end_ms:
                     prev.hard_cut_ms = start_ms
                     prev.fade_out_ms = self.policy.interruption_fade_ms
                     prev.cut_snap_window_ms = self.policy.cut_snap_window_ms
+                    prev.crossfade_ms = self.policy.crossfade_ms
+
+            # Sobreposição: a fala que entra também recebe swell equal-power curto.
+            if prev is not None and ev.entry.type == EntryType.OVERLAP:
+                placement.crossfade_ms = self.policy.crossfade_ms
 
             placements.append(placement)
 

@@ -65,6 +65,10 @@ class TimingPolicy:
     interruption_fade_ms: int = 32
     # A fala que ENTRA interrompendo sobe por cima da cauda da anterior ("swell").
     interruption_swell_in_ms: int = 45
+    # Janela de crossfade equal-power no ponto de interrupção: a fala anterior
+    # "afunda" (cos) enquanto a nova "sobe" (sin), mantendo potência somada
+    # constante (0 dB) — sem estouro nem cancelamento de fase na costura.
+    crossfade_ms: int = 40
     # Tolerância que o renderer tem p/ deslizar o corte até um vale de energia
     # (silêncio/valão) e não decepar no meio de uma consoante plosiva.
     # É a resposta pragmática ao "forced alignment": corte proporcional escolhido
@@ -123,6 +127,11 @@ class Placement:
     fade_out_ms: int = 0       # micro-fade de saída, OU o fade do corte se interrompida
     # Tolerância (ms) que o renderer pode deslizar o corte até um vale de energia.
     cut_snap_window_ms: int = 0
+    # Tipo de entrada desta fala (sequencial/interrupcao/sobreposicao) — o renderer
+    # usa para escolher a lei de fade (equal-power no crossfade vs cosine na borda).
+    entry_type: str = "sequencial"
+    # Janela de crossfade equal-power (ms) — preenchida em interrupção/sobreposição.
+    crossfade_ms: int = 0
 
     @property
     def end_ms(self) -> int:
