@@ -11,6 +11,10 @@ cd "$(dirname "$0")/.."
 echo "[setup] deps de DSP (numpy + pedalboard)..."
 pip install --quiet numpy pedalboard
 
+echo "[setup] TTS neural (Piper, CPU) + voz PT-BR..."
+pip install --quiet piper-tts
+bash scripts/download_piper.sh
+
 if [[ "${1:-}" == "--llm" ]]; then
   echo "[setup] llama-cpp-python (compila; pode levar alguns minutos)..."
   CMAKE_ARGS="-DGGML_NATIVE=OFF" pip install --quiet llama-cpp-python

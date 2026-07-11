@@ -26,6 +26,12 @@ class TrimmedTTS:
         self.keep_ms = keep_ms
         self._cache: dict[str, RenderedClip] = {}
 
+    @property
+    def backend_id(self) -> str:
+        # propaga a identidade do backend interno para a chave de cache
+        inner_id = getattr(self.inner, "backend_id", type(self.inner).__name__)
+        return f"trim({self.threshold_db}):{inner_id}"
+
     def synthesize(self, event: SpeechEvent) -> RenderedClip:
         if event.id in self._cache:
             return self._cache[event.id]

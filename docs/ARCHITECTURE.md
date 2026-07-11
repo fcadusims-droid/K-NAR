@@ -104,6 +104,32 @@ Pipeline completo: `roteiro → Director → Orquestrador → Renderer → áudi
 (ver `examples/direct_and_render.py`). O LLM padrão é **Qwen2.5-1.5B-Instruct**
 (Q4_K_M, ~1.1GB, CPU), instalado por `scripts/setup.sh --llm`.
 
+## TTS neural real + latência (implementado)
+
+O mock/formante foi substituível por voz neural de verdade (`PiperTTSBackend`,
+onnx/CPU): fonemas reais — plosivas, fricativas, respiração, prosódia intrínseca.
+Isso expõe o pipeline às condições que o mock mascarava.
+
+**Resposta à latência do TTS** (como não deixar a passagem 2 lenta travar o fluxo):
+
+| Peça | Mecanismo |
+|---|---|
+| `tts/cache.py::CachingTTS` | Cache em disco endereçado por conteúdo (hash de motor+voz+texto+prosódia). Iterar timeline/DSP não re-sintetiza nada. Medido: 0.40s → **0.01s** na 2ª execução. |
+| `tts/batch.py::synthesize_all` | Passagem 2 em pool de threads (onnx/torch liberam o GIL). Tempo de parede ≈ fala mais lenta, não a soma. |
+| `Orquestrador.render_scene(scene, clips=...)` | Aceita clips pré-sintetizados: síntese (lenta, cacheada, paralela) desacoplada da timeline (pura, instantânea). |
+
+O pipeline de duas passagens é, na prática, "sintetize-tudo-em-lote → arranje": o
+lote é onde vivem cache e paralelismo; a timeline nunca bloqueia esperando áudio.
+
+### O que o áudio real revelou (o mock escondia)
+
+O `snap_to_valley`, rodado sobre voz Piper real, mostrou que o alvo de corte
+**puramente matemático cai no meio de um fonema** (energia 2.4–3.9× a média — validando
+a crítica de que a proporção sozinha é fonética-cega). O snap de energia resgata a
+maioria (ex.: 3.9× → 0.18× num vale limpo, deslocando ~36ms), mas nem sempre acha um
+vale bom (um caso ficou em 0.93×). Conclusão medida: o snap faz trabalho essencial,
+e o degrau final é forced alignment sobre fonemas reais. Ver `examples/render_neural.py`.
+
 ## Refinamentos de DSP para o áudio neural (implementados)
 
 Preparam o terreno antes de plugar o XTTS, cuja saída é "caótica":
@@ -132,13 +158,15 @@ Preparam o terreno antes de plugar o XTTS, cuja saída é "caótica":
 
 ## O que ainda NÃO existe (próximos passos)
 
-1. Backend **XTTS real** implementando `TTSBackend` (voz local com palavras). O
-   encaixe já está pronto: `TrimmedTTS` neutraliza o padding e o `TTSBackend` é o
-   contrato. Aí `snap_to_valley` evolui para forced alignment sobre os fonemas reais.
-2. **Crossfade equal-power em `sobreposicao` longa** (hoje o equal-power cobre a
-   costura de interrupção; na fala simultânea prolongada as vozes somam e dependem
-   do limiter — falta a curva dedicada de coexistência).
-3. QA acústico automatizado (detectar clipping, overlaps que engolem palavras) —
-   `Timeline.overlaps()` é a semente.
-4. Afinar o prompt do `LlamaDirector` (o modelo pequeno tende a saturar tudo em
-   "alta"); poucos exemplos few-shot devem calibrar a escala de tensão.
+1. **Forced alignment** para o corte de interrupção: substituir o snap de energia
+   por fronteiras de fonema reais (aligner externo tipo whisperx/MFA, ou um modelo
+   Piper que exporte `phoneme_alignments`). É o degrau que o teste com áudio real
+   apontou — o snap resolve a maioria mas não todos os cortes.
+2. **Voz distinta por personagem**: o Piper `faber-medium` é mono-locutor; hoje os
+   personagens diferem só por prosódia + pan. Falta um modelo por voz (ou XTTS com
+   clonagem) para timbres realmente diferentes.
+3. **Crossfade equal-power em `sobreposicao` longa** (hoje o equal-power cobre a
+   costura de interrupção; na fala simultânea prolongada as vozes dependem do limiter).
+4. QA acústico automatizado (clipping, overlaps que engolem palavras).
+5. Afinar o prompt do `LlamaDirector` com few-shot (o 1.5B satura tudo em "alta") —
+   agora sim, calibrado contra a voz neural real, não contra o mock.
