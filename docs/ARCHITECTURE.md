@@ -87,6 +87,36 @@ ponto cego do corte frio.
 | `k_nar/render/renderer.py` | `TimelineRenderer`: EDL + clips → mix estéreo. Modos `naive`/`dry`/`full` para A/B. Master via pedalboard (passa-alta + limiter). |
 | `k_nar/schema.py` | Validador **estrito** do JSON do LLM (recusa fallback silencioso). |
 
+## Camada Director (PASSAGEM 1) — implementada
+
+Transforma roteiro cru (`personagem` + `texto`) no JSON de metadados relativos que
+o Orquestrador consome. Mantém o LLM como *classificador*, não como gerador de
+segundos (a "alternativa viável"): ele só decide tensão/entrada/pausa por fala; a
+montagem, os pans e a validação estrita ficam no código.
+
+| Módulo | Papel |
+|---|---|
+| `k_nar/director/base.py` | `BaseDirector`: monta o JSON da cena a partir de decisões por fala; valida no `schema`. |
+| `k_nar/director/rules.py` | `RuleBasedDirector`: heurística (pontuação + palavras-gatilho). Sem modelo, determinístico. Baseline e fallback. |
+| `k_nar/director/llama.py` | `LlamaDirector`: LLM local (GGUF via `llama-cpp-python`). Classifica por fala; campo inválido cai na regra (fallback auditável, nunca silencioso). |
+
+Pipeline completo: `roteiro → Director → Orquestrador → Renderer → áudio`
+(ver `examples/direct_and_render.py`). O LLM padrão é **Qwen2.5-1.5B-Instruct**
+(Q4_K_M, ~1.1GB, CPU), instalado por `scripts/setup.sh --llm`.
+
+## Refinamentos de DSP para o áudio neural (implementados)
+
+Preparam o terreno antes de plugar o XTTS, cuja saída é "caótica":
+
+* **Trim de silêncio** (`dsp.trim_silence` + `render/trim.py::TrimmedTTS`): remove o
+  padding que motores neurais injetam nas bordas, ANTES de medir a duração. Sem
+  isso, o tempo morto corromperia a proporção da interrupção e travaria o
+  `snap_to_valley` no silêncio artificial. `TrimmedTTS` envolve qualquer backend.
+* **Crossfade equal-power** (`dsp.fade_window(curve="equal_power")`): no ponto de
+  interrupção a voz anterior afunda (cos) exatamente sobre a subida (sin) da nova,
+  mantendo potência somada constante (0 dB) — no lugar da soma linear `+`, que
+  estoura o teto (medido: pico 1.27 → 0.90) e causa cancelamento de fase.
+
 ### Respostas às três críticas ao modelo matemático puro
 
 1. **Clique no corte frio** → o Orquestrador emite fades na EDL; o renderer aplica
@@ -102,10 +132,13 @@ ponto cego do corte frio.
 
 ## O que ainda NÃO existe (próximos passos)
 
-1. Backend **XTTS real** implementando `TTSBackend` (voz local com palavras).
-   Aí `snap_to_valley` pode evoluir para forced alignment de verdade sobre os fonemas.
-2. **Crossfade equal-power** explícito em `sobreposicao` (hoje as vozes coexistem
-   somadas; falta a curva de igual potência na zona de sobreposição).
+1. Backend **XTTS real** implementando `TTSBackend` (voz local com palavras). O
+   encaixe já está pronto: `TrimmedTTS` neutraliza o padding e o `TTSBackend` é o
+   contrato. Aí `snap_to_valley` evolui para forced alignment sobre os fonemas reais.
+2. **Crossfade equal-power em `sobreposicao` longa** (hoje o equal-power cobre a
+   costura de interrupção; na fala simultânea prolongada as vozes somam e dependem
+   do limiter — falta a curva dedicada de coexistência).
 3. QA acústico automatizado (detectar clipping, overlaps que engolem palavras) —
    `Timeline.overlaps()` é a semente.
-4. O **prompt/contrato do LLM** que produz o JSON da PASSAGEM 1 (validado por `schema`).
+4. Afinar o prompt do `LlamaDirector` (o modelo pequeno tende a saturar tudo em
+   "alta"); poucos exemplos few-shot devem calibrar a escala de tensão.

@@ -15,6 +15,7 @@ dependencies = []
 # Backends reais de TTS e o motor de DSP entram como EXTRAS, isolados do core.
 tts = []                         # ex.: "TTS" (Coqui/XTTS) — backend de voz real
 dsp = ["numpy>=1.24", "pedalboard>=0.9"]  # camada de render: sintese, mix, reverb
+llm = ["llama-cpp-python>=0.2"]  # Director com LLM local (GGUF em CPU)
 dev = ["pytest", "numpy>=1.24", "pedalboard>=0.9"]
 
 [tool.setuptools.packages.find]

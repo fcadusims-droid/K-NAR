@@ -63,24 +63,41 @@ class TimelineRenderer:
 
     # ------------------------------------------------------------------ #
     def _place(self, p: Placement, mono: np.ndarray, mode: str) -> np.ndarray:
-        # 1) recorte no corte de interrupção (se houver)
+        n = len(mono)
+
+        # ---- fala INTERROMPIDA: recorta e "afunda" com crossfade equal-power ----
         if p.hard_cut_ms is not None:
             cut = self._ms(p.hard_cut_ms - p.start_ms)
             if mode != "naive" and p.cut_snap_window_ms > 0:
-                floor = min(self._ms(self.policy.min_audible_ms), len(mono))
+                floor = min(self._ms(self.policy.min_audible_ms), n)
                 cut = dsp.snap_to_valley(
                     mono, target=cut, window=self._ms(p.cut_snap_window_ms),
                     floor=floor, smooth_win=self._ms(5),
                 )
-            mono = mono[: max(1, min(cut, len(mono)))]
+            cut = max(1, min(cut, n))
+
+            if mode == "naive":
+                # cru: corte seco no ponto exato => clique digital
+                seg = mono[:cut]
+                return np.stack([seg, seg]).astype(np.float32)
+
+            # estende ALÉM do corte pela janela de crossfade e desce em equal-power:
+            # a voz anterior afunda (cos) exatamente sobre a subida (sin) da nova.
+            xf = self._ms(p.crossfade_ms)
+            end = min(n, cut + xf)
+            seg = mono[:end]
+            fade_out = max(end - cut, self._ms(p.fade_out_ms))
+            seg = dsp.apply_fades(seg, self._ms(p.fade_in_ms), fade_out,
+                                  curve_in="cosine", curve_out="equal_power")
+            return dsp.equal_power_pan(seg, p.pan)
 
         if mode == "naive":
-            # cru: sem fade (clique no corte), sem pan (centro somando nos 2 canais)
             return np.stack([mono, mono]).astype(np.float32)
 
-        # 2) envelopes anti-clique que a EDL carrega
-        mono = dsp.apply_fades(mono, self._ms(p.fade_in_ms), self._ms(p.fade_out_ms))
-        # 3) palco estéreo
+        # ---- fala normal: fade-in equal-power se ela ENTRA sobre outra ----
+        curve_in = "equal_power" if p.entry_type in ("interrupcao", "sobreposicao") else "cosine"
+        mono = dsp.apply_fades(mono, self._ms(p.fade_in_ms), self._ms(p.fade_out_ms),
+                               curve_in=curve_in)
         return dsp.equal_power_pan(mono, p.pan)
 
     @staticmethod
