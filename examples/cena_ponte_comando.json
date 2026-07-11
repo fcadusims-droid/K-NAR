@@ -1,0 +1,33 @@
+{
+  "cena_id": "ponte_comando_01",
+  "ambientacao": "cockpit_metalico_eco",
+  "eventos": [
+    {
+      "id": "fala_1",
+      "personagem": "Alien A",
+      "texto": "O nucleo nao deve ser ativado sob nenhuma circunstancia.",
+      "voz": { "tensao": "alta", "velocidade": 0.85, "tom": -0.1 },
+      "entrada": { "tipo": "sequencial" },
+      "saida": { "pausa": "curta" },
+      "palco": { "estereo": -30 }
+    },
+    {
+      "id": "fala_2",
+      "personagem": "Alien B",
+      "texto": "Voce teme o inevitavel!",
+      "voz": { "tensao": "extrema", "velocidade": 1.1, "tom": 0.2 },
+      "entrada": { "tipo": "interrupcao", "agressividade": 0.25 },
+      "saida": { "pausa": "media" },
+      "palco": { "estereo": 20 }
+    },
+    {
+      "id": "fala_3",
+      "personagem": "Alien A",
+      "texto": "Entao que o sangue caia sobre as suas maos.",
+      "voz": { "tensao": "media", "velocidade": 0.9, "tom": 0.0 },
+      "entrada": { "tipo": "sequencial" },
+      "saida": { "pausa": "longa" },
+      "palco": { "estereo": -30 }
+    }
+  ]
+}
