@@ -16,6 +16,7 @@ from k_nar.models import (
     VoiceParams,
 )
 from k_nar.orchestrator import Orquestrador
+from k_nar.schema import SchemaError, validate_scene
 from k_nar.timeline import Placement, Timeline, TimingPolicy
 from k_nar.tts.base import RenderedClip, TTSBackend
 from k_nar.tts.mock import MockTTSBackend
@@ -30,11 +31,13 @@ __all__ = [
     "Placement",
     "RenderedClip",
     "Scene",
+    "SchemaError",
     "SpeechEvent",
     "TTSBackend",
     "Timeline",
     "TimingPolicy",
     "VoiceParams",
+    "validate_scene",
 ]
 
 __version__ = "0.1.0"

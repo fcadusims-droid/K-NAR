@@ -25,26 +25,38 @@ PASSAGEM 3  Code  -> cruza relativo x real -> Timeline (dados puros)
 
 Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-## Estado atual (MVP)
+## Estado atual
 
-Já implementado, **rodando 100% offline e sem dependências** (só stdlib):
+**Core (stdlib puro, sem dependências):**
 
 - `Orquestrador` — as passagens 2 e 3.
-- `TimingPolicy` — a matriz que traduz metadados relativos em milissegundos, com
-  guardas de inteligibilidade (uma interrupção nunca engole a fala inteira).
+- `TimingPolicy` — a matriz relativo→ms, com guardas de inteligibilidade e agora
+  também os **envelopes de atenuação** que a EDL carrega (fades anti-clique).
 - `TTSBackend` — contrato agnóstico; `MockTTSBackend` para testar sem motor de voz.
-- `Timeline` — a Edit Decision List que o DSP vai consumir.
+- `Timeline` — a Edit Decision List que o DSP consome.
+- `schema.validate_scene` — validação **estrita** do JSON do LLM (recusa fallback silencioso).
 
-Ainda **não** existe: backend XTTS real, camada de DSP (reverb/panning) e o prompt
-do LLM. Ver "próximos passos" na doc de arquitetura.
+**Camada DSP (`k_nar/render/`, requer `numpy` + `pedalboard`):**
+
+- `FormantTTSBackend` — voz sintética por formantes (não-verbal), para ouvir o ritmo.
+- `TimelineRenderer` — materializa a EDL em áudio estéreo: fades anti-clique, snap do
+  corte ao vale de energia, panning equal-power e **bus de reverb convolutivo** único
+  por cena (coesão acústica). Modos `naive`/`dry`/`full` para A/B.
+
+Ainda **não** existe: backend XTTS real (voz com palavras) e o prompt do LLM.
+Ver "próximos passos" em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Rodar
 
 ```bash
-# demo: carrega uma cena e imprime a linha de tempo
+# demo do core: imprime a linha de tempo (sem dependencias)
 python -m examples.run_mvp
 
-# testes (provam que a mesma agressividade escala com a duracao real)
+# gerar AUDIO: 3 versoes da cena (naive / dry / full) em build_audio/
+pip install numpy pedalboard
+python -m examples.render_scene
+
+# testes (core + DSP; os de DSP pulam se numpy faltar)
 python -m unittest discover -s tests -v
 ```
 

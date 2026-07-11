@@ -57,6 +57,20 @@ class TimingPolicy:
     # mas sem a guarda dura — as vozes coexistem, então pode invadir mais.
     overlap_min_audible_fraction: float = 0.15
 
+    # --- Envelopes de atenuação (a EDL carrega isto; o renderer NÃO adivinha) ---
+    # Micro-fades nas bordas de toda fala: matam o clique digital de descontinuidade.
+    edge_fade_in_ms: int = 8
+    edge_fade_out_ms: int = 12
+    # Fade do CORTE de interrupção: rápido, mas suave o bastante p/ não estalar.
+    interruption_fade_ms: int = 32
+    # A fala que ENTRA interrompendo sobe por cima da cauda da anterior ("swell").
+    interruption_swell_in_ms: int = 45
+    # Tolerância que o renderer tem p/ deslizar o corte até um vale de energia
+    # (silêncio/valão) e não decepar no meio de uma consoante plosiva.
+    # É a resposta pragmática ao "forced alignment": corte proporcional escolhido
+    # pelo Orquestrador + ajuste fino acústico dentro desta janela.
+    cut_snap_window_ms: int = 55
+
     # ------------------------------------------------------------------ #
     #  Traduções relativo -> real                                        #
     # ------------------------------------------------------------------ #
@@ -104,6 +118,11 @@ class Placement:
     # Se esta fala foi interrompida, o renderer deve cortar/duckar aqui (ms absolutos).
     # None = toca inteira. É a diferença concreta entre interrupção e sobreposição.
     hard_cut_ms: int | None = None
+    # Envelopes de atenuação decididos pelo Orquestrador (não pelo renderer):
+    fade_in_ms: int = 0        # micro-fade de entrada (anti-clique) ou "swell" de interrupção
+    fade_out_ms: int = 0       # micro-fade de saída, OU o fade do corte se interrompida
+    # Tolerância (ms) que o renderer pode deslizar o corte até um vale de energia.
+    cut_snap_window_ms: int = 0
 
     @property
     def end_ms(self) -> int:
