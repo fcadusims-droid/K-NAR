@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "k-nar"
+version = "0.1.0"
+description = "Motor de Performance Dramatica para audio drama autonomo (orquestrador de duas passagens, orientado a linha de tempo)."
+readme = "README.md"
+requires-python = ">=3.10"
+# O CORE nao tem dependencias: a logica de ritmo roda so com stdlib.
+dependencies = []
+
+[project.optional-dependencies]
+# Backends reais de TTS e o motor de DSP entram como EXTRAS, isolados do core.
+tts = []   # ex.: "TTS" (Coqui/XTTS) — preenchido quando plugarmos o backend real
+dsp = []   # ex.: "pedalboard", "pydub", "soundfile" — camada de render/ambiencia
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+include = ["k_nar*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
