@@ -52,6 +52,9 @@ class BaseDirector:
 
             if tipo_ev in ("narracao", "narrador"):
                 eventos.append(self._narration_event(item, i, texto))
+            elif tipo_ev in ("sfx", "som", "efeito", "ambiencia", "ambience", "ambiente"):
+                # som não precisa de direção de atuação: passa direto (com tag).
+                eventos.append(self._sound_event(item, i, tipo_ev))
             else:
                 personagem = str(item.get("personagem", item.get("character", "?")))
                 if personagem not in pans:
@@ -85,6 +88,22 @@ class BaseDirector:
             "saida": {"pausa": d["pausa"]},
             "palco": {"estereo": pan},
         }
+
+    def _sound_event(self, item, index, tipo_ev) -> dict[str, Any]:
+        """SFX/ambiência: sem direção de atuação. Repassa tag/ganho; a duração vem
+        do sample real (medida no render). SFX pontual entra em sequência."""
+        is_amb = tipo_ev in ("ambiencia", "ambience", "ambiente")
+        kind = "ambiencia" if is_amb else "sfx"
+        out: dict[str, Any] = {
+            "id": item.get("id", f"{kind}_{index+1}"),
+            "tipo_evento": kind,
+            "tag": str(item.get("tag", item.get("gatilho", item.get("som", "")))),
+        }
+        if item.get("texto"):
+            out["descricao"] = str(item["texto"])
+        if "ganho_db" in item or "gain_db" in item:
+            out["ganho_db"] = item.get("ganho_db", item.get("gain_db"))
+        return out
 
     def _narration_event(self, item, index, texto) -> dict[str, Any]:
         """Narração: mesma leitura de tensão, mas sempre SEQUENCIAL (o narrador não é

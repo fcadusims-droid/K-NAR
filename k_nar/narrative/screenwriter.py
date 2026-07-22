@@ -49,17 +49,24 @@ _NOT_NAMES = {
     "seu", "sua", "isso", "aquilo", "aquele", "aquela", "depois", "antes",
 }
 
-# Gatilhos de ação → tag de SFX (semente da biblioteca da Fase 5). Lexicon pequeno.
-_ACTION_TRIGGERS = {
+# Gatilhos de som PONTUAL (foley) → tag de SFX. Eventos discretos, no instante.
+_SFX_TRIGGERS = {
     "rangeu": "porta_range", "range": "porta_range", "rangendo": "porta_range",
     "explodiu": "explosao", "explosao": "explosao", "estourou": "explosao",
     "bateu": "batida", "batida": "batida", "socou": "batida",
     "estilhacou": "vidro_quebra", "quebrou": "vidro_quebra",
     "trovejou": "trovao", "trovao": "trovao", "raio": "trovao",
-    "disparou": "tiro", "tiro": "tiro", "atirou": "tiro",
-    "passos": "passos", "pisou": "passos", "correu": "passos",
-    "vento": "vento", "ventania": "vento", "chuva": "chuva", "sirene": "sirene",
-    "motor": "motor", "motores": "motor", "zumbido": "motor", "alarme": "alarme",
+    "disparou": "tiro", "tiro": "tiro", "tiros": "tiro", "atirou": "tiro",
+    "passos": "passos", "pisou": "passos", "poca": "passos_poca", "poça": "passos_poca",
+    "sirene": "sirene", "alarme": "alarme",
+}
+# Gatilhos de som CONTÍNUO → tag de AMBIÊNCIA. Camas que cobrem a cena (beds).
+_AMBIENCE_TRIGGERS = {
+    "floresta": "floresta_noite", "mata": "floresta_noite", "selva": "floresta_noite",
+    "chuva": "chuva", "chovia": "chuva", "chovendo": "chuva", "temporal": "chuva",
+    "vento": "vento", "ventania": "vento", "brisa": "vento",
+    "motor": "motor", "motores": "motor", "zumbido": "motor", "nave": "motor",
+    "cidade": "cidade", "multidao": "multidao", "multidão": "multidao", "praca": "multidao",
 }
 
 _QUOTE_RE = re.compile(r"[“„]([^“”„]+)[”“]|"  # “ ” „
@@ -79,17 +86,29 @@ def _norm(text: str) -> str:
 class Screenwriter(Protocol):
     """Qualquer coisa que transforme prosa -> roteiro estruturado (PASSAGEM 0)."""
 
-    def write(self, prose: str, scene_id: str = "cena",
-              ambiance: str = "seco") -> dict[str, Any]:
+    def write(self, prose: str, scene_id: str = "cena", ambiance: str = "seco",
+              narrator: bool = True) -> dict[str, Any]:
         ...
 
 
 class RuleBasedScreenwriter:
-    """Segmentação por heurística: aspas → diálogo, resto → narração; verbo de fala
-    → locutor + deixa; verbo/substantivo de ação na narração → gatilho de SFX."""
+    """Segmentação por heurística. Classifica cada frase em:
 
-    def write(self, prose: str, scene_id: str = "cena",
-              ambiance: str = "seco") -> dict[str, Any]:
+      * DIÁLOGO   — o que está entre aspas (com locutor + deixa da atribuição);
+      * SFX       — som PONTUAL ("passos numa poça"): vira efeito, NÃO é narrado;
+      * AMBIÊNCIA — cenário CONTÍNUO ("a floresta", "chovia"): vira cama de fundo;
+      * NARRAÇÃO  — o resto da prosa de história (só se `narrator=True`).
+
+    `narrator=False` = modo radiodrama: sem narração, a história vive de vozes + sons.
+    Descrição sonora pura não é lida pelo narrador — é o som que o motor cria.
+    """
+
+    # Uma frase é "só som" (vira SFX e NÃO é narrada) se tem gatilho de som pontual,
+    # é curta e não menciona um personagem (nome próprio) — é uma didascália sonora.
+    _PURE_SFX_MAX_WORDS = 8
+
+    def write(self, prose: str, scene_id: str = "cena", ambiance: str = "seco",
+              narrator: bool = True) -> dict[str, Any]:
         quotes: list[str] = []
 
         def _mask(m: re.Match) -> str:
@@ -105,6 +124,7 @@ class RuleBasedScreenwriter:
 
         elementos: list[dict[str, Any]] = []
         acoes: list[dict[str, Any]] = []
+        ambiences: dict[str, str] = {}   # tag -> primeira frase (dedupe: é bed)
         last_speaker: str | None = None
         counter = 0
 
@@ -123,18 +143,36 @@ class RuleBasedScreenwriter:
                     if cue:
                         el["deixa"] = cue
                     elementos.append(el)
-            else:
-                text = sent.strip()
-                if not text:
-                    continue
+                continue
+
+            text = sent.strip()
+            if not text:
+                continue
+
+            amb_tag = self._ambience_trigger(text)
+            if amb_tag and amb_tag not in ambiences:
+                ambiences[amb_tag] = text  # cama de fundo (dedupe por tag)
+
+            sfx_tag = self._sfx_trigger(text)
+            pure_sound = bool(sfx_tag) and self._is_pure_sound_cue(text)
+            if sfx_tag:
+                counter += 1
+                elementos.append({"id": f"sfx_{counter}", "tipo": "sfx",
+                                  "tag": sfx_tag, "texto": text})
+                acoes.append({"gatilho": sfx_tag, "texto": text, "ancora": f"sfx_{counter}"})
+
+            # Narração: só se há narrador E a frase não é uma didascália sonora pura
+            # (som "passos na poça" não deve ser LIDO — vira o efeito, e só).
+            if narrator and not pure_sound:
                 counter += 1
                 elementos.append({"id": f"narr_{counter}", "tipo": "narracao", "texto": text})
-                trig = self._action_trigger(text)
-                if trig:
-                    acoes.append({"gatilho": trig, "texto": text, "ancora": f"narr_{counter}"})
+
+        # camas de ambiência primeiro (cobrem a cena inteira; ordem é indiferente)
+        beds = [{"id": f"amb_{i+1}", "tipo": "ambiencia", "tag": tag, "texto": src}
+                for i, (tag, src) in enumerate(ambiences.items())]
 
         return {"cena_id": scene_id, "ambientacao": ambiance,
-                "elementos": elementos, "acoes": acoes}
+                "elementos": beds + elementos, "acoes": acoes}
 
     # ------------------------------------------------------------------ #
     @staticmethod
@@ -156,9 +194,31 @@ class RuleBasedScreenwriter:
         return (speaker or last_speaker or "Personagem"), cue
 
     @staticmethod
-    def _action_trigger(text: str) -> str | None:
+    def _sfx_trigger(text: str) -> str | None:
+        tags = [_SFX_TRIGGERS[_norm(w)] for w in _WORD_RE.findall(text)
+                if _norm(w) in _SFX_TRIGGERS]
+        if not tags:
+            return None
+        # preferência pela variante mais específica ("passos" + "poça" -> splash)
+        if "passos_poca" in tags:
+            return "passos_poca"
+        return tags[0]
+
+    @staticmethod
+    def _ambience_trigger(text: str) -> str | None:
         for w in _WORD_RE.findall(text):
-            tag = _ACTION_TRIGGERS.get(_norm(w))
+            tag = _AMBIENCE_TRIGGERS.get(_norm(w))
             if tag:
                 return tag
         return None
+
+    def _is_pure_sound_cue(self, text: str) -> bool:
+        """Frase que é SÓ um som (didascália): curta e sem nome de personagem."""
+        words = _WORD_RE.findall(text)
+        if len(words) > self._PURE_SFX_MAX_WORDS:
+            return False
+        # nome próprio (capitalizado fora do início) => é narração de história, não som puro
+        for w in words[1:]:
+            if w[:1].isupper() and _norm(w) not in _NOT_NAMES:
+                return False
+        return True

@@ -181,10 +181,64 @@ class NarrationEvent:
         )
 
 
-# Evento de linha de tempo (união de tipos). Por ora fala/narração; SFX/ambiência
-# entram na Fase 5. `SpeechEvent` e `NarrationEvent` compartilham a interface de
-# duck-typing que o Orquestrador consome (.id/.character/.text/.voice/.entry/.exit/.pan/.track).
-Event = Union[SpeechEvent, NarrationEvent]
+@dataclass
+class SfxEvent:
+    """Efeito sonoro PONTUAL (foley). O `tag` é o que buscar na biblioteca de sons
+    (`tiro`, `passos_poca`, `porta_range`) — NÃO é fala e o narrador não o lê. A
+    duração vem do sample REAL medido (mesma tese das duas passagens: intenção
+    relativa → ms reais), então uma fala pode ser ancorada p/ reagir ao som."""
+
+    id: str
+    tag: str
+    gain_db: float = -3.0                 # nível relativo no mix
+    pan: int = 0
+    entry: EntryDynamics = field(default_factory=EntryDynamics)  # timing na linha
+    exit: ExitDynamics = field(default_factory=ExitDynamics)
+    track: Track = Track.SFX
+    character: str = ""                    # duck-typing c/ o Orquestrador (sem voz)
+    text: str = ""                         # descrição opcional (nunca falada)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "SfxEvent":
+        palco = d.get("palco", {}) or {}
+        return cls(
+            id=str(d["id"]),
+            tag=str(d.get("tag", d.get("gatilho", d.get("som", "")))),
+            gain_db=_as_float(d.get("ganho_db", d.get("gain_db", -3.0)), -3.0),
+            pan=int(_as_float(palco.get("estereo", palco.get("pan", 0)), 0.0)),
+            entry=EntryDynamics.from_dict(d.get("entrada", d.get("dinamica_de_entrada"))),
+            exit=ExitDynamics.from_dict(d.get("saida", d.get("dinamica_de_saida"))),
+            text=str(d.get("texto", d.get("descricao", ""))),
+        )
+
+
+@dataclass
+class AmbienceEvent:
+    """Cama AMBIENTAL que cobre a cena inteira (`floresta_noite`, `chuva`, `motor`).
+    Loopável e baixa (fundo); o ducking a faz afundar sob a fala. Não entra na
+    sequência temporal — é um bed, não um evento pontual."""
+
+    id: str
+    tag: str
+    gain_db: float = -20.0                 # baixa por padrão (fundo)
+    track: Track = Track.AMBIENCE
+    character: str = ""
+    text: str = ""
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "AmbienceEvent":
+        return cls(
+            id=str(d["id"]),
+            tag=str(d.get("tag", d.get("ambiente", d.get("som", "")))),
+            gain_db=_as_float(d.get("ganho_db", d.get("gain_db", -20.0)), -20.0),
+            text=str(d.get("texto", d.get("descricao", ""))),
+        )
+
+
+# Evento de linha de tempo (união de tipos). `SpeechEvent`/`NarrationEvent` são fala;
+# `SfxEvent`/`AmbienceEvent` são som. Todos compartilham a interface de duck-typing que
+# o Orquestrador consome (.id/.character/.text/.track [+ .entry/.exit/.pan p/ sequenciáveis]).
+Event = Union[SpeechEvent, NarrationEvent, SfxEvent, AmbienceEvent]
 
 # Dispatcher: lê o discriminador do JSON e constrói o evento certo.
 _EVENT_BUILDERS = {
@@ -192,12 +246,18 @@ _EVENT_BUILDERS = {
     "dialogo": SpeechEvent.from_dict,
     "narracao": NarrationEvent.from_dict,
     "narrador": NarrationEvent.from_dict,
+    "sfx": SfxEvent.from_dict,
+    "som": SfxEvent.from_dict,
+    "efeito": SfxEvent.from_dict,
+    "ambiencia": AmbienceEvent.from_dict,
+    "ambience": AmbienceEvent.from_dict,
+    "ambiente": AmbienceEvent.from_dict,
 }
 
 
 def build_event(d: dict[str, Any]):
-    """Constrói SpeechEvent ou NarrationEvent conforme `tipo_evento` (default: fala).
-    Também trata `personagem: "Narrador"` como narração, por ergonomia."""
+    """Constrói o evento certo conforme `tipo_evento` (default: fala). Também trata
+    `personagem: "Narrador"` como narração, por ergonomia."""
     kind = str(d.get("tipo_evento", d.get("tipo", d.get("kind", "")))).strip().lower()
     if not kind and str(d.get("personagem", d.get("character", ""))).strip().lower() in ("narrador", "narrator"):
         kind = "narracao"

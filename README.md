@@ -81,7 +81,16 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - `Track` + `NarrationEvent` — a linha de tempo vira multitrack (diálogo/narração/…);
   o renderer mixa por trilha (base do ducking).
 - `RuleBasedScreenwriter` (PASSAGEM 0) — prosa → narração + diálogo (com locutor) +
-  gatilhos de ação (sementes de SFX). Cadeia história→áudio em `examples/story_to_audio.py`.
+  **SFX** (som pontual) + **ambiência** (cenário). Descrição sonora vira SOM, não
+  narração; o **narrador é opcional** (modo radiodrama). Cadeia em `examples/story_to_audio.py`.
+
+**Som: SFX + ambiência + ducking (`k_nar/sfx/`, `render/renderer.py`):**
+
+- `SfxBackend` (espelha `TTSBackend`): `LibrarySfxBackend` (samples **reais** por tag,
+  baseline de produção) e `ProceduralSfxBackend` (síntese, stand-in runnable).
+- `SfxEvent` / `AmbienceEvent` — som pontual (foley, ancora a fala p/ reagir) e cama.
+- **Ducking sidechain** no `_combine_tracks`: ambiência/SFX afundam sob a fala e voltam
+  quando ela pára — a mixagem que impede a cacofonia. O `duck_db` controla a profundidade.
 
 Próxima grande evolução: virar um **motor de áudio narrativo completo** (narração +
 SFX/foley + ambiência a partir de prosa). Roadmap em [`docs/ROADMAP.md`](docs/ROADMAP.md);
@@ -112,9 +121,10 @@ python -m examples.render_neural roteiro.json --llm   # Director LLM (few-shot)
 scripts/download_piper.sh jeff                    # segunda voz real
 python -m examples.multivoice_qa
 
-# HISTORIA em prosa -> audiobook narrado (Screenwriter -> Director -> audio)
-python -m examples.story_to_audio                 # usa examples/historia_exemplo.txt
+# HISTORIA em prosa -> AUDIODRAMA (vozes + SFX + ambiencia + ducking)
+python -m examples.story_to_audio                 # usa examples/historia_sonora.txt
 python -m examples.story_to_audio minha_historia.txt
+python -m examples.story_to_audio --sem-narrador  # modo radiodrama (so vozes + sons)
 
 # cena narrada (narrador + personagens em trilhas separadas)
 python -m examples.narrated_scene
