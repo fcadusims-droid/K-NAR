@@ -92,11 +92,28 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **Ducking sidechain** no `_combine_tracks`: ambiência/SFX afundam sob a fala e voltam
   quando ela pára — a mixagem que impede a cacofonia. O `duck_db` controla a profundidade.
 
-Próxima grande evolução: virar um **motor de áudio narrativo completo** (narração +
-SFX/foley + ambiência a partir de prosa). Roadmap em [`docs/ROADMAP.md`](docs/ROADMAP.md);
-detalhes das fases em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Roadmap em [`docs/ROADMAP.md`](docs/ROADMAP.md); detalhes das fases em
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-## Rodar
+## Usar (história → audiobook)
+
+Escreva a história num `.md`/`.txt` (formato em [`docs/TEMPLATE.md`](docs/TEMPLATE.md)) e rode a CLI:
+
+```bash
+scripts/setup.sh                     # deps (numpy + pedalboard + piper + onnx) + voz PT
+scripts/download_lang.sh en          # (opcional) voz de outro idioma: en | es
+
+python -m k_nar examples/historia_template.md          # -> examples/historia_template.wav
+python -m k_nar minha_historia.md -o audiobook.wav
+python -m k_nar minha_historia.md --sem-narrador       # modo radiodrama (só vozes + sons)
+python -m k_nar minha_historia.md --idioma en          # pt | en | es (sobrescreve o front-matter)
+python -m k_nar minha_historia.md --sons sounds/       # samples reais (sounds/manifest.json)
+```
+
+O front-matter define título, idioma, narrador (sim/não) e ambientação; nada é
+obrigatório (um `.md` só com prosa funciona). Multi-idioma: **pt / en / es**.
+
+## Rodar os exemplos
 
 ```bash
 # core: imprime a linha de tempo (sem dependencias)

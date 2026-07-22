@@ -11,21 +11,22 @@ from __future__ import annotations
 from typing import Any
 
 from k_nar.director.base import BaseDirector
+from k_nar.narrative.lexicons import LEXICONS
+from k_nar.text import strip_accents as _norm
 
-# palavras-gatilho de alta carga dramática (pt-br, sem acento p/ robustez)
+# palavras-gatilho de alta carga dramática (pt-br + en, sem acento p/ robustez).
+# São dica de conteúdo; para outros idiomas a tensão ainda vem da pontuação + deixa.
 _HOT_WORDS = {
     "matar", "morte", "morrer", "sangue", "medo", "nunca", "jamais", "destruir",
     "inevitavel", "guerra", "fogo", "traicao", "fim", "perigo", "corram", "agora",
+    "kill", "death", "die", "blood", "fear", "never", "war", "fire", "danger", "run",
 }
 
-# "Deixas" (verbos de fala) que o Screenwriter extraiu: empurram a tensão.
-_LOUD_CUES = {"gritou", "berrou", "exclamou", "bradou", "vociferou", "ordenou", "alertou"}
-_SOFT_CUES = {"sussurrou", "murmurou", "cochichou", "gaguejou", "resmungou"}
-
-
-def _norm(text: str) -> str:
-    subs = str.maketrans("áàâãéêíóôõúç", "aaaaeeiooouc")
-    return text.lower().translate(subs)
+# "Deixas" (verbos de fala) que o Screenwriter extraiu: empurram a tensão. União de
+# todos os idiomas, para "gritou"/"shouted"/"gritó" registrarem sem saber a língua.
+# (união é idempotente; os apelidos repetidos em LEXICONS não atrapalham.)
+_LOUD_CUES = frozenset().union(*(lx.loud_verbs for lx in LEXICONS.values()))
+_SOFT_CUES = frozenset().union(*(lx.soft_verbs for lx in LEXICONS.values()))
 
 
 class RuleBasedDirector(BaseDirector):

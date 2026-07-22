@@ -30,44 +30,8 @@ from __future__ import annotations
 import re
 from typing import Any, Protocol, runtime_checkable
 
-# Verbos de fala (normalizados, sem acento). Servem p/ achar o locutor e a "deixa".
-_SPEECH_VERBS = {
-    "disse", "falou", "perguntou", "respondeu", "gritou", "berrou", "exclamou",
-    "sussurrou", "murmurou", "retrucou", "indagou", "replicou", "ordenou",
-    "questionou", "afirmou", "declarou", "avisou", "alertou", "gaguejou",
-    "cochichou", "bradou", "vociferou", "resmungou", "pediu", "insistiu",
-    "continuou", "concluiu", "acrescentou", "completou", "chamou",
-}
-# Verbos que carregam tensão (a "deixa" que o Director usa p/ calibrar a atuação).
-_LOUD_VERBS = {"gritou", "berrou", "exclamou", "bradou", "vociferou", "ordenou", "alertou"}
-_SOFT_VERBS = {"sussurrou", "murmurou", "cochichou", "gaguejou", "resmungou"}
-
-# Palavras capitalizadas que NÃO são nomes de personagem (evita falsos locutores).
-_NOT_NAMES = {
-    "a", "o", "e", "ele", "ela", "eles", "elas", "entao", "mas", "quando",
-    "de", "do", "da", "no", "na", "com", "por", "que", "um", "uma", "os", "as",
-    "seu", "sua", "isso", "aquilo", "aquele", "aquela", "depois", "antes",
-}
-
-# Gatilhos de som PONTUAL (foley) → tag de SFX. Eventos discretos, no instante.
-_SFX_TRIGGERS = {
-    "rangeu": "porta_range", "range": "porta_range", "rangendo": "porta_range",
-    "explodiu": "explosao", "explosao": "explosao", "estourou": "explosao",
-    "bateu": "batida", "batida": "batida", "socou": "batida",
-    "estilhacou": "vidro_quebra", "quebrou": "vidro_quebra",
-    "trovejou": "trovao", "trovao": "trovao", "raio": "trovao",
-    "disparou": "tiro", "tiro": "tiro", "tiros": "tiro", "atirou": "tiro",
-    "passos": "passos", "pisou": "passos", "poca": "passos_poca", "poça": "passos_poca",
-    "sirene": "sirene", "alarme": "alarme",
-}
-# Gatilhos de som CONTÍNUO → tag de AMBIÊNCIA. Camas que cobrem a cena (beds).
-_AMBIENCE_TRIGGERS = {
-    "floresta": "floresta_noite", "mata": "floresta_noite", "selva": "floresta_noite",
-    "chuva": "chuva", "chovia": "chuva", "chovendo": "chuva", "temporal": "chuva",
-    "vento": "vento", "ventania": "vento", "brisa": "vento",
-    "motor": "motor", "motores": "motor", "zumbido": "motor", "nave": "motor",
-    "cidade": "cidade", "multidao": "multidao", "multidão": "multidao", "praca": "multidao",
-}
+from k_nar.narrative.lexicons import Lexicon, get_lexicon
+from k_nar.text import strip_accents as _norm
 
 _QUOTE_RE = re.compile(r"[“„]([^“”„]+)[”“]|"  # “ ” „
                        r'"([^"]+)"|'                                              # " "
@@ -77,22 +41,17 @@ _MASK = "\x00%d\x00"
 _MASK_RE = re.compile(r"\x00(\d+)\x00")
 
 
-def _norm(text: str) -> str:
-    subs = str.maketrans("áàâãéêíóôõúüç", "aaaaeeiooouuc")
-    return text.lower().translate(subs)
-
-
 @runtime_checkable
 class Screenwriter(Protocol):
     """Qualquer coisa que transforme prosa -> roteiro estruturado (PASSAGEM 0)."""
 
     def write(self, prose: str, scene_id: str = "cena", ambiance: str = "seco",
-              narrator: bool = True) -> dict[str, Any]:
+              narrator: bool = True, lang: str = "pt") -> dict[str, Any]:
         ...
 
 
 class RuleBasedScreenwriter:
-    """Segmentação por heurística. Classifica cada frase em:
+    """Segmentação por heurística, dirigida por IDIOMA. Classifica cada frase em:
 
       * DIÁLOGO   — o que está entre aspas (com locutor + deixa da atribuição);
       * SFX       — som PONTUAL ("passos numa poça"): vira efeito, NÃO é narrado;
@@ -100,7 +59,8 @@ class RuleBasedScreenwriter:
       * NARRAÇÃO  — o resto da prosa de história (só se `narrator=True`).
 
     `narrator=False` = modo radiodrama: sem narração, a história vive de vozes + sons.
-    Descrição sonora pura não é lida pelo narrador — é o som que o motor cria.
+    A estrutura (aspas, quebra de frases) é agnóstica de idioma; o vocabulário (verbos
+    de fala, gatilhos de som) vem do `Lexicon` do idioma (PT/EN/ES). Ver `lexicons.py`.
     """
 
     # Uma frase é "só som" (vira SFX e NÃO é narrada) se tem gatilho de som pontual,
@@ -108,7 +68,8 @@ class RuleBasedScreenwriter:
     _PURE_SFX_MAX_WORDS = 8
 
     def write(self, prose: str, scene_id: str = "cena", ambiance: str = "seco",
-              narrator: bool = True) -> dict[str, Any]:
+              narrator: bool = True, lang: str = "pt") -> dict[str, Any]:
+        lex = get_lexicon(lang)
         quotes: list[str] = []
 
         def _mask(m: re.Match) -> str:
@@ -132,7 +93,7 @@ class RuleBasedScreenwriter:
             ids = _MASK_RE.findall(sent)
             if ids:
                 attribution = _MASK_RE.sub(" ", sent)
-                speaker, cue = self._attribution(attribution, last_speaker)
+                speaker, cue = self._attribution(attribution, last_speaker, lex)
                 last_speaker = speaker
                 for qid in ids:
                     counter += 1
@@ -149,12 +110,12 @@ class RuleBasedScreenwriter:
             if not text:
                 continue
 
-            amb_tag = self._ambience_trigger(text)
+            amb_tag = self._ambience_trigger(text, lex)
             if amb_tag and amb_tag not in ambiences:
                 ambiences[amb_tag] = text  # cama de fundo (dedupe por tag)
 
-            sfx_tag = self._sfx_trigger(text)
-            pure_sound = bool(sfx_tag) and self._is_pure_sound_cue(text)
+            sfx_tag = self._sfx_trigger(text, lex)
+            pure_sound = bool(sfx_tag) and self._is_pure_sound_cue(text, lex)
             if sfx_tag:
                 counter += 1
                 elementos.append({"id": f"sfx_{counter}", "tipo": "sfx",
@@ -182,21 +143,22 @@ class RuleBasedScreenwriter:
         parts = re.split(r"(?<=[.!?…])\s+", text.strip())
         return [p for p in parts if p.strip()]
 
-    def _attribution(self, text: str, last_speaker: str | None) -> tuple[str, str | None]:
+    def _attribution(self, text: str, last_speaker: str | None,
+                     lex: Lexicon) -> tuple[str, str | None]:
         """(locutor, deixa) a partir do trecho de atribuição (fora das aspas)."""
         words = _WORD_RE.findall(text)
-        cue = next((_norm(w) for w in words if _norm(w) in _SPEECH_VERBS), None)
+        cue = next((_norm(w) for w in words if _norm(w) in lex.speech_verbs), None)
         # locutor: última palavra Capitalizada que não é verbo nem stopword
         speaker = None
         for w in words:
-            if w[:1].isupper() and _norm(w) not in _SPEECH_VERBS and _norm(w) not in _NOT_NAMES:
+            if w[:1].isupper() and _norm(w) not in lex.speech_verbs and _norm(w) not in lex.not_names:
                 speaker = w
         return (speaker or last_speaker or "Personagem"), cue
 
     @staticmethod
-    def _sfx_trigger(text: str) -> str | None:
-        tags = [_SFX_TRIGGERS[_norm(w)] for w in _WORD_RE.findall(text)
-                if _norm(w) in _SFX_TRIGGERS]
+    def _sfx_trigger(text: str, lex: Lexicon) -> str | None:
+        tags = [lex.sfx_triggers[_norm(w)] for w in _WORD_RE.findall(text)
+                if _norm(w) in lex.sfx_triggers]
         if not tags:
             return None
         # preferência pela variante mais específica ("passos" + "poça" -> splash)
@@ -205,20 +167,20 @@ class RuleBasedScreenwriter:
         return tags[0]
 
     @staticmethod
-    def _ambience_trigger(text: str) -> str | None:
+    def _ambience_trigger(text: str, lex: Lexicon) -> str | None:
         for w in _WORD_RE.findall(text):
-            tag = _AMBIENCE_TRIGGERS.get(_norm(w))
+            tag = lex.ambience_triggers.get(_norm(w))
             if tag:
                 return tag
         return None
 
-    def _is_pure_sound_cue(self, text: str) -> bool:
+    def _is_pure_sound_cue(self, text: str, lex: Lexicon) -> bool:
         """Frase que é SÓ um som (didascália): curta e sem nome de personagem."""
         words = _WORD_RE.findall(text)
         if len(words) > self._PURE_SFX_MAX_WORDS:
             return False
         # nome próprio (capitalizado fora do início) => é narração de história, não som puro
         for w in words[1:]:
-            if w[:1].isupper() and _norm(w) not in _NOT_NAMES:
+            if w[:1].isupper() and _norm(w) not in lex.not_names:
                 return False
         return True
