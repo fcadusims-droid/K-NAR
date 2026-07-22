@@ -113,6 +113,21 @@ python -m k_nar minha_historia.md --sons sounds/       # samples reais (sounds/m
 O front-matter define título, idioma, narrador (sim/não) e ambientação; nada é
 obrigatório (um `.md` só com prosa funciona). Multi-idioma: **pt / en / es**.
 
+## Interface web (GitHub Pages + Actions)
+
+Usuários geram audiobooks **sem instalar nada**:
+
+1. Abrem a **página** (GitHub Pages: `docs/index.html`) — escrevem a história, escolhem
+   idioma e narrador on/off, e clicam em *Gerar*.
+2. O botão abre um **issue já preenchido** (formulário `🎧 Gerar audiobook`).
+3. A **GitHub Action** (`.github/workflows/audiobook.yml`) renderiza a história e
+   comenta no issue o link para baixar o `audiobook.wav`.
+
+Para ativar no seu fork (uma vez): **Settings → Actions** (habilitar workflows) e
+**Settings → Pages → Source: `main` / `/docs`**. Ajuste `REPO` no topo do
+`<script>` em `docs/index.html` se o fork tiver outro nome. Também dá para rodar o
+workflow manualmente em **Actions → audiobook → Run workflow**.
+
 ## Rodar os exemplos
 
 ```bash

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K-NAR — sua história vira audiobook</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --edge:#262b36; --ink:#e8eaed; --mut:#9aa4b2;
+    --acc:#7cc5ff; --acc2:#a6f0c6; --danger:#ff9b9b; --radius:14px;
+  }
+  @media (prefers-color-scheme:light){
+    :root{ --bg:#f6f7f9; --panel:#ffffff; --edge:#e3e6ea; --ink:#1a1d23; --mut:#5b6472; --acc:#1f6feb; --acc2:#1a7f4b; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:760px;margin:0 auto;padding:32px 20px 80px}
+  header{text-align:center;margin:24px 0 8px}
+  .logo{font-size:44px;font-weight:800;letter-spacing:-1px;margin:0}
+  .logo span{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{color:var(--mut);font-size:18px;margin:6px 0 0}
+  .card{background:var(--panel);border:1px solid var(--edge);border-radius:var(--radius);
+        padding:22px;margin:22px 0}
+  h2{font-size:15px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin:0 0 14px}
+  label{display:block;font-weight:600;margin:14px 0 6px;font-size:14px}
+  input[type=text],textarea,select{width:100%;background:var(--bg);color:var(--ink);
+        border:1px solid var(--edge);border-radius:10px;padding:11px 12px;font:inherit}
+  textarea{min-height:190px;resize:vertical;line-height:1.6}
+  .row{display:flex;gap:14px;flex-wrap:wrap}
+  .row > div{flex:1;min-width:160px}
+  .seg{display:flex;border:1px solid var(--edge);border-radius:10px;overflow:hidden}
+  .seg button{flex:1;background:var(--bg);color:var(--mut);border:0;padding:11px;font:inherit;cursor:pointer}
+  .seg button[aria-pressed=true]{background:var(--acc);color:#04121f;font-weight:700}
+  .go{margin-top:20px;width:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));
+      color:#04121f;border:0;border-radius:12px;padding:15px;font-size:17px;font-weight:800;cursor:pointer}
+  .go:hover{filter:brightness(1.06)}
+  .hint{color:var(--mut);font-size:13.5px}
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:8px 0 0}
+  .steps div{background:var(--bg);border:1px solid var(--edge);border-radius:10px;padding:12px 14px;font-size:14px}
+  .steps b{display:block;color:var(--acc);margin-bottom:2px}
+  code{background:var(--bg);border:1px solid var(--edge);border-radius:6px;padding:1px 6px;font-size:13px}
+  a{color:var(--acc)}
+  details{margin-top:14px}
+  summary{cursor:pointer;color:var(--acc);font-weight:600}
+  pre{background:var(--bg);border:1px solid var(--edge);border-radius:10px;padding:14px;overflow:auto;font-size:13px}
+  footer{text-align:center;color:var(--mut);font-size:13px;margin-top:34px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="logo">K-<span>NAR</span></p>
+    <p class="tag">Sua história em texto vira um <b>audiobook dramatizado</b> — vozes, efeitos e ambiência.</p>
+  </header>
+
+  <div class="card">
+    <h2>Como funciona</h2>
+    <div class="steps">
+      <div><b>1. Escreva</b>Diálogos entre aspas; sons e cenários viram efeitos e ambiência.</div>
+      <div><b>2. Envie</b>O botão abre um issue já preenchido — é só confirmar.</div>
+      <div><b>3. Baixe</b>O K-NAR gera o áudio e comenta o link no seu issue.</div>
+    </div>
+  </div>
+
+  <form class="card" id="form" onsubmit="return gerar(event)">
+    <h2>Sua história</h2>
+    <label for="titulo">Título</label>
+    <input type="text" id="titulo" placeholder="A Ponte de Comando" required>
+
+    <div class="row">
+      <div>
+        <label for="idioma">Idioma</label>
+        <select id="idioma">
+          <option value="pt">Português</option>
+          <option value="en">English</option>
+          <option value="es">Español</option>
+        </select>
+      </div>
+      <div>
+        <label>Narrador</label>
+        <div class="seg" id="narrSeg">
+          <button type="button" data-v="com" aria-pressed="true" onclick="setNarr('com')">Com narrador</button>
+          <button type="button" data-v="sem" aria-pressed="false" onclick="setNarr('sem')">Sem (radiodrama)</button>
+        </div>
+      </div>
+    </div>
+
+    <label for="historia">História</label>
+    <textarea id="historia" required placeholder='A nave cortava o vazio, e o motor enchia a ponte. Uma porta rangeu.
+"Tem alguém aí?", perguntou a Comandante. Então um tiro disparou nas sombras.
+"Todos em posição!", ela gritou.'></textarea>
+    <p class="hint">Frases curtas de som (“Um trovão ecoou.”) viram efeitos; cenários (floresta, chuva, motor…) viram ambiência. Guia completo em <a id="tpl" href="#">docs/TEMPLATE.md</a>.</p>
+
+    <button class="go" type="submit">🎧 Gerar audiobook</button>
+
+    <details>
+      <summary>Preferir a linha de comando?</summary>
+      <p class="hint">Salve como <code>historia.md</code> e rode:</p>
+      <pre id="cli">python -m k_nar historia.md</pre>
+    </details>
+  </form>
+
+  <footer>
+    Motor open-source de performance dramática. <a id="repo" href="#">Repositório no GitHub</a>.
+  </footer>
+</div>
+
+<script>
+  // Ajuste se fizer fork: "owner/repo".
+  var REPO = "fcadusims-droid/K-NAR";
+  var narr = "com";
+
+  document.getElementById("repo").href = "https://github.com/" + REPO;
+  document.getElementById("tpl").href = "https://github.com/" + REPO + "/blob/main/docs/TEMPLATE.md";
+
+  function setNarr(v){
+    narr = v;
+    document.querySelectorAll("#narrSeg button").forEach(function(b){
+      b.setAttribute("aria-pressed", b.dataset.v === v ? "true" : "false");
+    });
+    refreshCli();
+  }
+  function refreshCli(){
+    var flag = narr === "sem" ? " --sem-narrador" : "";
+    var lang = document.getElementById("idioma").value;
+    var lf = lang === "pt" ? "" : " --idioma " + lang;
+    document.getElementById("cli").textContent = "python -m k_nar historia.md" + flag + lf;
+  }
+  document.getElementById("idioma").addEventListener("change", refreshCli);
+
+  function gerar(e){
+    e.preventDefault();
+    var titulo = document.getElementById("titulo").value.trim() || "historia";
+    var idioma = document.getElementById("idioma").value;
+    var historia = document.getElementById("historia").value.trim();
+    var narrador = narr === "sem" ? "Sem narrador (radiodrama)" : "Com narrador";
+    if(!historia){ alert("Escreva sua história."); return false; }
+    var url = "https://github.com/" + REPO + "/issues/new?"
+      + "template=audiobook.yml"
+      + "&labels=audiobook"
+      + "&title=" + encodeURIComponent("[audiobook] " + titulo)
+      + "&titulo=" + encodeURIComponent(titulo)
+      + "&idioma=" + encodeURIComponent(idioma)
+      + "&narrador=" + encodeURIComponent(narrador)
+      + "&historia=" + encodeURIComponent(historia);
+    window.open(url, "_blank");
+    return false;
+  }
+  refreshCli();
+</script>
+</body>
+</html>
