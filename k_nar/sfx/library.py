@@ -18,9 +18,15 @@ Carregar áudio usa `pedalboard.io.AudioFile` (lida com wav/flac/mp3/ogg) e cai 
 
 from __future__ import annotations
 
+import zlib
 from pathlib import Path
 
 import numpy as np
+
+
+def _stable_hash(s: str) -> int:
+    """Hash ESTÁVEL entre processos (hash() é salgado): escolha de sample reprodutível."""
+    return zlib.crc32(s.encode("utf-8")) & 0xFFFFFFFF
 
 from k_nar.tts.base import RenderedClip
 
@@ -55,7 +61,7 @@ class LibrarySfxBackend:
         paths = self.manifest.get(tag)
         if paths:
             # variação determinística por id do evento (mesmo id -> mesmo sample)
-            choice = paths[abs(hash(event.id)) % len(paths)]
+            choice = paths[_stable_hash(event.id) % len(paths)]
             path = self.base_dir / choice if self.base_dir else Path(choice)
             audio = self._load(path)
             if audio is not None and len(audio):

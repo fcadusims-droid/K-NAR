@@ -38,6 +38,14 @@ class TestProceduralSfx(unittest.TestCase):
         self.assertGreater(len(clip.samples), 0)
         self.assertGreater(float(np.max(np.abs(clip.samples))), 0.0)
 
+    def test_all_known_tags_render_without_error(self):
+        # regressão: o jitter dos passos já gerou índice negativo (fatia vazia).
+        from k_nar.sfx.procedural import _AMBIENCE, _SFX
+        for tag in list(_SFX) + list(_AMBIENCE):
+            clip = self.be.render(SfxEvent(id="x", tag=tag))
+            self.assertGreater(len(clip.samples), 0, f"tag {tag} vazio")
+            self.assertTrue(np.all(np.isfinite(clip.samples)), f"tag {tag} tem NaN/inf")
+
 
 @unittest.skipUnless(_HAS_NUMPY, "numpy ausente")
 class TestLibrarySfx(unittest.TestCase):

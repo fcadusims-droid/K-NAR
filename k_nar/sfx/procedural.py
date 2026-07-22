@@ -13,13 +13,17 @@ mesmo som soa igual entre a medição de duração e o render.
 
 from __future__ import annotations
 
+import zlib
+
 import numpy as np
 
 from k_nar.tts.base import RenderedClip
 
 
 def _rng(tag: str) -> np.random.Generator:
-    return np.random.default_rng(abs(hash(tag)) % (2**32))
+    # crc32 é ESTÁVEL entre processos (hash() é salgado por PYTHONHASHSEED); sem isso
+    # o mesmo tag soaria diferente a cada execução — quebrando a reprodutibilidade.
+    return np.random.default_rng(zlib.crc32(tag.encode("utf-8")) & 0xFFFFFFFF)
 
 
 def _noise(n: int, rng) -> np.ndarray:
@@ -92,7 +96,7 @@ def _footsteps(sr, dur, rng, splash=False):
     out = np.zeros(n, dtype=np.float32)
     steps = max(2, int(dur / 0.45))
     for k in range(steps):
-        start = int((k + rng.uniform(-0.05, 0.05)) * sr * 0.45)
+        start = max(0, int((k + rng.uniform(-0.05, 0.05)) * sr * 0.45))  # nunca negativo
         if start >= n:
             break
         ln = int(sr * (0.14 if splash else 0.06))
