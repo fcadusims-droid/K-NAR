@@ -92,11 +92,43 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **Ducking sidechain** no `_combine_tracks`: ambiência/SFX afundam sob a fala e voltam
   quando ela pára — a mixagem que impede a cacofonia. O `duck_db` controla a profundidade.
 
-Próxima grande evolução: virar um **motor de áudio narrativo completo** (narração +
-SFX/foley + ambiência a partir de prosa). Roadmap em [`docs/ROADMAP.md`](docs/ROADMAP.md);
-detalhes das fases em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Roadmap em [`docs/ROADMAP.md`](docs/ROADMAP.md); detalhes das fases em
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-## Rodar
+## Usar (história → audiobook)
+
+Escreva a história num `.md`/`.txt` (formato em [`docs/TEMPLATE.md`](docs/TEMPLATE.md)) e rode a CLI:
+
+```bash
+scripts/setup.sh                     # deps (numpy + pedalboard + piper + onnx) + voz PT
+scripts/download_lang.sh en          # (opcional) voz de outro idioma: en | es
+
+python -m k_nar examples/historia_template.md          # -> examples/historia_template.wav
+python -m k_nar minha_historia.md -o audiobook.wav
+python -m k_nar minha_historia.md --sem-narrador       # modo radiodrama (só vozes + sons)
+python -m k_nar minha_historia.md --idioma en          # pt | en | es (sobrescreve o front-matter)
+python -m k_nar minha_historia.md --sons sounds/       # samples reais (sounds/manifest.json)
+```
+
+O front-matter define título, idioma, narrador (sim/não) e ambientação; nada é
+obrigatório (um `.md` só com prosa funciona). Multi-idioma: **pt / en / es**.
+
+## Interface web (GitHub Pages + Actions)
+
+Usuários geram audiobooks **sem instalar nada**:
+
+1. Abrem a **página** (GitHub Pages: `docs/index.html`) — escrevem a história, escolhem
+   idioma e narrador on/off, e clicam em *Gerar*.
+2. O botão abre um **issue já preenchido** (formulário `🎧 Gerar audiobook`).
+3. A **GitHub Action** (`.github/workflows/audiobook.yml`) renderiza a história e
+   comenta no issue o link para baixar o `audiobook.wav`.
+
+Para ativar no seu fork (uma vez): **Settings → Actions** (habilitar workflows) e
+**Settings → Pages → Source: `main` / `/docs`**. Ajuste `REPO` no topo do
+`<script>` em `docs/index.html` se o fork tiver outro nome. Também dá para rodar o
+workflow manualmente em **Actions → audiobook → Run workflow**.
+
+## Rodar os exemplos
 
 ```bash
 # core: imprime a linha de tempo (sem dependencias)

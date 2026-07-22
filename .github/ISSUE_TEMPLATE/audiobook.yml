@@ -1,0 +1,52 @@
+name: 🎧 Gerar audiobook
+description: Envie sua história e o K-NAR gera o audiobook dramatizado (vozes + efeitos + ambiência).
+title: "[audiobook] "
+labels: ["audiobook"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Escreva sua história em prosa. **Diálogos entre aspas** (`"..."`), com a
+        atribuição logo depois (`— perguntou Ana`). Frases curtas de som viram
+        efeitos; cenários (floresta, chuva, motor…) viram ambiência. Detalhes em
+        [docs/TEMPLATE.md](../blob/main/docs/TEMPLATE.md).
+  - type: input
+    id: titulo
+    attributes:
+      label: Título
+      placeholder: A Ponte de Comando
+    validations:
+      required: true
+  - type: dropdown
+    id: idioma
+    attributes:
+      label: Idioma
+      options:
+        - pt
+        - en
+        - es
+      default: 0
+    validations:
+      required: true
+  - type: dropdown
+    id: narrador
+    attributes:
+      label: Narrador
+      description: "Com narrador (audiobook) ou sem (radiodrama: só vozes + sons)."
+      options:
+        - Com narrador
+        - Sem narrador (radiodrama)
+      default: 0
+    validations:
+      required: true
+  - type: textarea
+    id: historia
+    attributes:
+      label: História
+      description: A sua história em prosa.
+      placeholder: |
+        A nave cortava o vazio, e o motor enchia a ponte de comando. Uma porta rangeu.
+        "Tem alguém aí?", perguntou a Comandante. Então um tiro disparou nas sombras.
+        "Todos em posição!", ela gritou.
+    validations:
+      required: true

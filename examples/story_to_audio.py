@@ -1,52 +1,24 @@
-"""Fase 5: HISTÓRIA em prosa → AUDIODRAMA completo (vozes + SFX + ambiência).
+"""HISTÓRIA em prosa → AUDIODRAMA (vozes + SFX + ambiência), com o breakdown das passagens.
 
-    prosa .txt
-       │  PASSAGEM 0  Screenwriter   (narração / diálogo / SFX / ambiência)
-       ▼                              — descrição sonora vira SOM, não narração;
-    roteiro estruturado                 narrador é OPCIONAL (--sem-narrador)
-       │  PASSAGEM 1  Director        (tensão / entrada / pausa por fala)
-       ▼
-    cena (fala + som, validada)
-       │  PASSAGENS 2-3  Orquestrador  (fala→TTS, som→SfxBackend; EDL multitrack)
-       ▼
-    Timeline  ──►  Renderer (DUCKING)  ──►  audiodrama
-       (ambiência/SFX afundam sob a fala; um som não estraga o outro)
+Demo verboso do pipeline: mostra como o Screenwriter (PASSAGEM 0) classifica cada
+frase e como a EDL multitrack fica, e então renderiza. Para o uso "de verdade",
+prefira a CLI: `python -m k_nar historia.md`.
 
-    python -m examples.story_to_audio [historia.txt] [--sem-narrador]
+    python -m examples.story_to_audio [historia.md|.txt] [--sem-narrador] [--idioma en]
 
-Sons: `ProceduralSfxBackend` (síntese, sem baixar nada) por padrão; troque por
-`LibrarySfxBackend(manifest)` para usar samples REAIS. Vozes: Piper se houver
-modelos, senão formante.
+Usa `k_nar.pipeline.render_story` por baixo (a mesma cadeia da CLI e da GitHub Action).
 """
 
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 
-from k_nar import (Orquestrador, ProsodyPolicy, Scene, TimingPolicy, Track,
-                   check_mix, check_timeline, format_report)
-from k_nar.director import RuleBasedDirector
-from k_nar.narrative import RuleBasedScreenwriter
-from k_nar.render import dsp
-from k_nar.render.renderer import TimelineRenderer
-from k_nar.sfx import ProceduralSfxBackend
-
-FABER = "models/piper/pt_BR-faber-medium.onnx"
-JEFF = "models/piper/pt_BR-jeff-medium.onnx"
-_SOUND_TRACKS = {Track.SFX.value, Track.AMBIENCE.value}
-
-
-def _voice_backend(prosody, sr_hint=22050):
-    if Path(FABER).exists():
-        from k_nar.tts.cache import CachingTTS
-        from k_nar.tts.multivoice import MultiVoiceTTSBackend, VoiceProfile
-        from k_nar.render.trim import TrimmedTTS
-        profiles = {"Narrador": VoiceProfile(model_path=JEFF if Path(JEFF).exists() else FABER)}
-        mv = MultiVoiceTTSBackend(default_model=FABER, profiles=profiles, prosody=prosody)
-        return CachingTTS(TrimmedTTS(mv), cache_dir=".knar_cache"), 22050, "piper"
-    from k_nar.render.voice import FormantTTSBackend
-    return FormantTTSBackend(sr=24000), 24000, "formante"
+from k_nar import Track
+from k_nar.pipeline import render_story
+from k_nar.qa import format_report
+from k_nar.story import load_story
 
 
 def _fmt(ms: int) -> str:
@@ -55,55 +27,33 @@ def _fmt(ms: int) -> str:
 
 def main() -> None:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    narrator = "--sem-narrador" not in sys.argv
-    historia = Path(args[0]) if args else Path(__file__).parent / "historia_sonora.txt"
-    prose = historia.read_text("utf-8").strip()
+    src = Path(args[0]) if args else Path(__file__).parent / "historia_template.md"
+    story = load_story(src)
+    if "--sem-narrador" in sys.argv:
+        story = replace(story, narrator=False)
+    if "--idioma" in sys.argv:
+        story = replace(story, lang=sys.argv[sys.argv.index("--idioma") + 1])
 
-    # PASSAGEM 0
-    script = RuleBasedScreenwriter().write(
-        prose, scene_id=historia.stem, ambiance="cockpit_metalico_eco", narrator=narrator)
-    print(f"--- PASSAGEM 0: Screenwriter (narrador={'on' if narrator else 'OFF'}) ---")
-    for el in script["elementos"]:
+    res = render_story(story)
+
+    print(f"--- HISTÓRIA: {story.title!r}  ({story.lang}, "
+          f"{'com' if story.narrator else 'sem'} narrador) ---")
+    print(f"[PASSAGEM 0] Screenwriter → {len(res.script['elementos'])} elementos")
+    for el in res.script["elementos"]:
         icon = {"fala": "💬", "narracao": "🎙️", "sfx": "🔊", "ambiencia": "🌲"}.get(el["tipo"], "?")
         who = el.get("personagem") or el.get("tag") or ""
-        print(f"  {icon} {el['tipo']:<9} {who:<14} {el.get('texto','')[:52]!r}")
+        print(f"  {icon} {el['tipo']:<9} {who:<14} {el.get('texto','')[:50]!r}")
 
-    # PASSAGEM 1
-    scene = Scene.from_dict(RuleBasedDirector().direct(script))
-
-    # PASSAGENS 2-3: fala via TTS, som via SfxBackend
-    prosody = ProsodyPolicy()
-    policy = TimingPolicy()
-    voice, sr, kind = _voice_backend(prosody)
-    sfxb = ProceduralSfxBackend(sr=sr)
-    print(f"\n[voz] {kind}   [som] procedural")
-
-    clips = {}
-    for ev in scene.events:
-        clips[ev.id] = sfxb.render(ev) if _track_name(ev) in _SOUND_TRACKS else voice.synthesize(ev)
-    timeline = Orquestrador(voice, policy, prosody=prosody).render_scene(scene, clips=clips)
-    samples = {eid: c.samples for eid, c in clips.items()}
-
-    print(f"\n--- TIMELINE MULTITRACK ({_fmt(timeline.total_duration_ms)}) ---")
-    for p in timeline.placements:
+    print(f"\n--- TIMELINE MULTITRACK ({_fmt(res.timeline.total_duration_ms)}) — voz: {res.voice_kind} ---")
+    for p in res.timeline.placements:
         icon = {"dialogo": "💬", "narracao": "🎙️", "sfx": "🔊", "ambiencia": "🌲"}.get(p.track, "?")
-        span = "cena inteira" if p.track == "ambiencia" else f"{_fmt(p.start_ms)}→{_fmt(p.end_ms)}"
+        span = "cena inteira" if p.track == Track.AMBIENCE.value else f"{_fmt(p.start_ms)}→{_fmt(p.end_ms)}"
         print(f"  {icon} {p.track:<10} {span:<22} {p.character or p.text}")
 
-    renderer = TimelineRenderer(sr=sr, policy=policy)
-    stereo = renderer.render(timeline, samples, mode="full")
     out = Path("build_audio"); out.mkdir(exist_ok=True)
-    renderer.write_wav(str(out / "audiodrama.wav"), stereo)
-
-    print("\n--- QA ---")
-    issues = check_timeline(timeline, policy) + check_mix(dsp.clipping_stats(stereo))
-    print(format_report(issues))
-    print(f"\naudio: {(out / 'audiodrama.wav').resolve()}  ({stereo.shape[1]/sr:.2f}s)")
-
-
-def _track_name(ev) -> str:
-    t = getattr(ev, "track", None)
-    return getattr(t, "value", t) or "dialogo"
+    res.write(str(out / "audiodrama.wav"))
+    print(f"\n--- QA ---\n{format_report(res.issues)}")
+    print(f"\naudio: {(out / 'audiodrama.wav').resolve()}  ({res.stereo.shape[1]/res.sr:.2f}s)")
 
 
 if __name__ == "__main__":

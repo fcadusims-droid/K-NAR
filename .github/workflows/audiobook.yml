@@ -1,0 +1,102 @@
+name: audiobook
+
+# Renderiza uma história em audiobook. Dispara por:
+#  - Issue Form "Gerar audiobook" (label `audiobook`)  -> a interface do usuário;
+#  - workflow_dispatch                                  -> teste/uso manual.
+on:
+  issues:
+    types: [opened, edited]
+  workflow_dispatch:
+    inputs:
+      titulo:
+        description: "Título"
+        required: false
+        default: "historia"
+      story:
+        description: "História (prosa)"
+        required: true
+      language:
+        description: "Idioma: pt | en | es"
+        required: false
+        default: "pt"
+      narrator:
+        description: "Narrador: com | sem"
+        required: false
+        default: "com"
+
+jobs:
+  render:
+    # só roda em issues com o label `audiobook` (ou em dispatch manual)
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'audiobook'))
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Monta a história (story.md)
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          WD_TITLE: ${{ github.event.inputs.titulo }}
+          WD_STORY: ${{ github.event.inputs.story }}
+          WD_LANG: ${{ github.event.inputs.language }}
+          WD_NARR: ${{ github.event.inputs.narrator }}
+        run: python scripts/from_issue.py
+
+      - name: Instala dependências
+        run: pip install --quiet numpy pedalboard piper-tts onnx
+
+      - name: Baixa a voz do idioma
+        run: bash scripts/download_lang.sh "$(cat run_lang.txt)"
+
+      - name: Gera o audiobook
+        run: python -m k_nar story.md -o audiobook.wav
+
+      - name: Publica o áudio (artifact)
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: audiobook
+          path: |
+            audiobook.wav
+            story.md
+
+      - name: Comenta o resultado no issue
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                '🎧 **Seu audiobook está pronto!**',
+                '',
+                `Baixe o arquivo \`audiobook.wav\` na aba **Artifacts** desta execução:`,
+                run,
+                '',
+                '_Gerado pelo K-NAR. Edite o issue para gerar de novo._'
+              ].join('\n')
+            });
+
+      - name: Falha -> comenta o erro no issue
+        if: failure() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `⚠️ Não consegui gerar o audiobook. Veja o log: ${run}`
+            });
