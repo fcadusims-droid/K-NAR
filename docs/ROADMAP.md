@@ -91,11 +91,16 @@ o pacing — mixado profissionalmente para um som não estragar o outro.
   offline (soa reativo ao ouvinte); streaming ao vivo fica fora de escopo.
 * **Aqui o motor vira o que a visão pede**: história em texto → audiobook com sons.
 
-### Fase 6 — Polimento e escala
-Música/trilha; crossfade equal-power em `sobreposicao` longa; calibrar o
-`LlamaDirector`; e um "diretor de mix" — os níveis relativos de narração / fala /
-SFX / ambiência como mais uma matriz de política, no espírito do `TimingPolicy` e
-da `ProsodyPolicy`.
+### Fase 6 — Polimento e escala (em andamento)
+* **Diretor de mix** ✅ — `MixPolicy` (`k_nar/mixpolicy.py`): os níveis de bus por
+  trilha (fala / narração / SFX / ambiência / música) + a profundidade do ducking numa
+  matriz única, no espírito do `TimingPolicy` e do `ProsodyPolicy`. Dois níveis de
+  ganho: por evento (Director) e por bus (mixador). O renderer o consome.
+* **Música** — a trilha `musica` já é ducada e tem nível no `MixPolicy`; falta só um
+  `MusicEvent`/fonte dedicada (uma trilha via `LibrarySfxBackend` já funciona).
+* Pendentes (polimento menor): crossfade equal-power em `sobreposicao` longa;
+  calibrar mais o `LlamaDirector` (precisa do modelo); `NeuralSfxBackend`; sincronia
+  fina SFX↔verbo via forced alignment sobre a narração.
 
 ## Caminho crítico
 

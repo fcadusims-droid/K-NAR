@@ -296,13 +296,22 @@ só cobra sobreposição entre FALAS (som coexiste de propósito; o ducking reso
 para reagir a ele (soldado grita → tiro → recruta reage) — a reação é resolvida no
 render offline. Ver `examples/story_to_audio.py` (com `--sem-narrador`).
 
-## O que ainda NÃO existe (próximos passos)
+## Diretor de mix — `MixPolicy` (implementado)
 
-1. **Música/trilha** como mais uma trilha ducada; **crossfade equal-power em
-   `sobreposicao` longa**; **"diretor de mix"** (níveis relativos como matriz de
-   política); calibração do `LlamaDirector`; `NeuralSfxBackend` (texto→áudio). Fase 6.
-2. **Sincronia fina SFX↔verbo** via forced alignment sobre a narração (hoje o SFX
-   entra na sequência, não no fonema exato do verbo). Ver `docs/ROADMAP.md`.
+O balanço entre as camadas num objeto só, no espírito do `TimingPolicy` (ritmo) e do
+`ProsodyPolicy` (expressividade). `k_nar/mixpolicy.py::MixPolicy` centraliza os níveis
+de bus por trilha (fala 0 dB de referência, narração −1, SFX −2, música −6…) e a
+profundidade do ducking. São **dois níveis de ganho**: por EVENTO (o Director decide a
+tensão da fala, a força do tiro) e por BUS (o mixador decide o balanço geral aqui). O
+`renderer._combine_tracks` aplica o trim de bus e então o ducking — afinar o "som" do
+audiodrama inteiro é ajustar um objeto. Um `MixPolicy` diferente = um estilo de mixagem.
+
+## O que ainda NÃO existe (próximos passos — Fase 6)
+
+1. **Música** com fonte dedicada (a trilha `musica` já é ducada e tem nível no
+   `MixPolicy`; falta um `MusicEvent`/gerador — uma trilha via `LibrarySfxBackend` já roda).
+2. **Crossfade equal-power em `sobreposicao` longa**; **sincronia fina SFX↔verbo** via
+   forced alignment sobre a narração; calibração do `LlamaDirector`; `NeuralSfxBackend`.
 
 ## Visão: motor de áudio narrativo completo (roadmap)
 

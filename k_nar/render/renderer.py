@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from k_nar.mixpolicy import MixPolicy
 from k_nar.render import dsp
 from k_nar.render.impulse import make_impulse_response
 from k_nar.timeline import Placement, Timeline
@@ -31,17 +32,21 @@ except Exception:  # pragma: no cover
 
 
 class TimelineRenderer:
-    # Trilhas que formam a "chave" do ducking (a fala manda) e as que afundam.
-    _KEY_TRACKS = ("dialogo", "narracao")
-    _DUCKED_TRACKS = ("ambiencia", "sfx", "musica")
-
     def __init__(self, sr: int = 24000, policy: TimingPolicy | None = None,
-                 reverb_wet: float = 0.30, duck_db: float = -12.0):
+                 reverb_wet: float = 0.30, mix: MixPolicy | None = None,
+                 duck_db: float | None = None):
         self.sr = sr
         self.policy = policy or TimingPolicy()
         self.reverb_wet = reverb_wet
-        # Profundidade do ducking: quanto ambiência/SFX/música afundam sob a fala.
-        self.duck_db = duck_db
+        # O "diretor de mix": níveis por trilha + profundidade do ducking. `duck_db`
+        # avulso (retrocompat) sobrescreve o da política, se dado.
+        self.mix = mix or MixPolicy()
+        if duck_db is not None:
+            self.mix.duck_db = duck_db
+
+    @property
+    def duck_db(self) -> float:
+        return self.mix.duck_db
 
     # ------------------------------------------------------------------ #
     def _ms(self, ms: float) -> int:
@@ -99,25 +104,30 @@ class TimelineRenderer:
         return np.tile(mono, reps)[:n].astype(np.float32)
 
     def _combine_tracks(self, beds: dict[str, np.ndarray], total: int) -> np.ndarray:
-        """Combina os beds por DUCKING sidechain: a fala (diálogo+narração) é a chave,
-        e ambiência/SFX/música afundam quando ela soa e voltam quando ela pára. É a
-        mixagem profissional que impede a cacofonia — um som não estraga o outro."""
+        """Combina os beds pelo `MixPolicy`: aplica o trim de bus por trilha e faz o
+        DUCKING sidechain — a fala (diálogo+narração) é a chave, e ambiência/SFX/música
+        afundam quando ela soa e voltam quando ela pára. É a mixagem profissional que
+        impede a cacofonia — um som não estraga o outro."""
         if not beds:
             return np.zeros((2, total), dtype=np.float32)
 
+        mixp = self.mix
+        # trim de bus por trilha (o balanço geral do "diretor de mix")
+        leveled = {name: bed * mixp.level_gain(name) for name, bed in beds.items()}
+
         speech = np.zeros((2, total), dtype=np.float32)
-        for name in self._KEY_TRACKS:
-            if name in beds:
-                speech += beds[name]
+        for name in mixp.key_tracks:
+            if name in leveled:
+                speech += leveled[name]
 
         gain = self._duck_gain(speech)   # (total,) em [floor, 1], 1 = sem fala
 
-        mix = speech.copy()
-        for name, bed in beds.items():
-            if name in self._KEY_TRACKS:
+        out = speech.copy()
+        for name, bed in leveled.items():
+            if name in mixp.key_tracks:
                 continue
-            mix += bed * gain if gain is not None else bed
-        return mix
+            out += bed * gain if gain is not None else bed
+        return out
 
     def _duck_gain(self, speech: np.ndarray) -> np.ndarray | None:
         """Curva de ganho (por amostra) para as trilhas duckadas, a partir do

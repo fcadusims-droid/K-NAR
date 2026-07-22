@@ -22,6 +22,7 @@ from k_nar.models import (
     VoiceParams,
     build_event,
 )
+from k_nar.mixpolicy import MixPolicy
 from k_nar.orchestrator import Orquestrador
 from k_nar.prosody import Prosody, ProsodyPolicy
 from k_nar.qa import QAIssue, check_mix, check_timeline, format_report
@@ -38,6 +39,7 @@ __all__ = [
     "EntryType",
     "Event",
     "ExitDynamics",
+    "MixPolicy",
     "MockTTSBackend",
     "NarrationEvent",
     "SfxEvent",
