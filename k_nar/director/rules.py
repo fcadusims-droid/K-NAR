@@ -18,6 +18,10 @@ _HOT_WORDS = {
     "inevitavel", "guerra", "fogo", "traicao", "fim", "perigo", "corram", "agora",
 }
 
+# "Deixas" (verbos de fala) que o Screenwriter extraiu: empurram a tensão.
+_LOUD_CUES = {"gritou", "berrou", "exclamou", "bradou", "vociferou", "ordenou", "alertou"}
+_SOFT_CUES = {"sussurrou", "murmurou", "cochichou", "gaguejou", "resmungou"}
+
 
 def _norm(text: str) -> str:
     subs = str.maketrans("áàâãéêíóôõúç", "aaaaeeiooouc")
@@ -25,12 +29,12 @@ def _norm(text: str) -> str:
 
 
 class RuleBasedDirector(BaseDirector):
-    def _decide(self, personagem, texto, index, prev_text) -> dict[str, Any]:
+    def _decide(self, personagem, texto, index, prev_text, cue=None) -> dict[str, Any]:
         low = _norm(texto)
         words = low.split()
         n_words = max(1, len(words))
 
-        # --- tensão: pontuação + palavras-gatilho + caixa alta ---
+        # --- tensão: pontuação + palavras-gatilho + caixa alta + deixa ---
         score = 0.0
         score += 0.9 * texto.count("!")
         letters = [c for c in texto if c.isalpha()]
@@ -40,6 +44,11 @@ class RuleBasedDirector(BaseDirector):
         score += 0.7 * hits
         if texto.endswith("...") or texto.endswith(".."):
             score -= 0.4  # hesitação/suspensão puxa p/ baixo
+        # a deixa da narração ("gritou Ana", "sussurrou ele") calibra a atuação
+        if cue in _LOUD_CUES:
+            score += 1.3
+        elif cue in _SOFT_CUES:
+            score -= 1.0
 
         if score >= 2.2:
             tensao = "extrema"

@@ -191,16 +191,98 @@ Preparam o terreno antes de plugar o XTTS, cuja saída é "caótica":
    tolerância decidida pela política. É um stand-in leve de *forced alignment*:
    corte proporcional escolhido pelo Orquestrador + ajuste acústico fino no renderer.
 
+## Forced alignment no corte de interrupção (implementado)
+
+O degrau que o áudio real apontou. O Piper (VITS) tem um preditor de duração
+interno e, com `include_alignments`, EXPÕE quantas amostras cada fonema ocupa —
+*forced alignment de verdade*, do próprio modelo, sem aligner externo (whisperx/MFA)
+e sem baixar mais nada. Só precisa do pacote `onnx` (patch do grafo em memória).
+
+O achado de acoplamento: como o alinhamento é **dado puro** (índices de amostra, sem
+áudio), a decisão do corte SOBE do renderer (que adivinhava por energia) para o
+**Orquestrador**, que já tem o alinhamento e a duração real. A EDL carrega a decisão.
+
+| Módulo | Papel |
+|---|---|
+| `k_nar/align.py` | `Alignment`/`PhonemeSpan`: fronteiras fonema→amostra, stdlib puro. Transforma-se junto do áudio (`scaled` p/ o pitch-shift, `trimmed` p/ o trim de silêncio) e faz o `snap` à melhor fronteira (pontuação > palavra > fonema). |
+| `tts/neural.py` | `PiperTTSBackend` carrega com `include_alignments`, coleta os fonemas dos chunks e escala pelo pitch-shift. |
+| `orchestrator.py::_resolve_cut` | ancora o corte na fronteira LINGUÍSTICA via `Alignment.snap`; sem alinhamento, cai no fallback de energia (auditável). |
+
+**Híbrido linguístico + acústico** (validado por medição no faber-medium): o
+alinhamento do VITS é fiel ao áudio (offset ~0ms), MAS fronteiras palavra-a-palavra
+vozeadas ("não‧deve") caem em energia alta — porém sempre há um micro-vale a ≤30ms.
+Então: o Orquestrador ancora na **fronteira** (janela larga, `Alignment.snap`) e o
+renderer só desliza numa **janela estreita** (`cut_refine_window_ms`, ~30ms) até o
+instante acusticamente limpo. Cada sinal no que é melhor — o corte final fica numa
+fronteira de palavra REAL *e* num vale de energia. O snap de energia de janela larga
+vira o fallback para backends que não exportam fonemas (mock/formante). Ver o A/B em
+`examples/render_neural.py` (alvo cru → energia larga → fronteira → refino final).
+
+## Voz distinta por personagem + QA acústico (implementado)
+
+Voz real por personagem (não só o pitch-shift sobre um locutor único) e a rede de
+segurança que precede as camadas narrativas.
+
+| Módulo | Papel |
+|---|---|
+| `tts/multivoice.py` | `VoiceProfile` (modelo próprio / `speaker_id` / pitch / ritmo por personagem) + `MultiVoiceTTSBackend`: roteia cada fala para o backend Piper certo, cacheando UM modelo por (arquivo, locutor). Satisfaz `TTSBackend` — o Orquestrador não muda. |
+| `tts/neural.py` | `PiperTTSBackend` aceita `speaker_id` (modelos VITS multi-locutor). |
+| `k_nar/qa.py` | `check_timeline` (EDL, stdlib): sobreposição que engole palavra, corte agressivo demais, cruzamento sequencial inesperado. `check_mix` (a partir de `dsp.clipping_stats`): clipping/pico perigoso. `format_report` p/ CI. |
+| `render/dsp.py::clipping_stats` | mede pico e amostras clipadas (dado puro p/ o QA decidir sem numpy). |
+
+`examples/multivoice_qa.py` roteia Alien A→faber e Alien B→jeff (dois modelos PT-BR
+distintos, timbres reais) e imprime o relatório de QA. Vozes por `scripts/download_piper.sh [voz]`.
+
+A CI (`.github/workflows/tests.yml`) roda a suíte a cada push/PR (usa mock/formante,
+sem baixar modelos) — o QA da EDL e do mix vira portão automatizado.
+
+## Generalização para áudio narrativo: `Event` + Timeline multitrack (implementado)
+
+A virada de "motor de diálogo" para "motor de áudio narrativo". O modelo de evento
+deixa de ser só `SpeechEvent`: ganha um **discriminador de trilha** (`Track`) e um
+segundo tipo, `NarrationEvent` (a voz do narrador — mesmo TTS, outra trilha).
+
+| Peça | Papel |
+|---|---|
+| `models.Track` | enum de bus: `dialogo`/`narracao`/`sfx`/`ambiencia`/`musica`. O discriminador que separa os eventos no mix. |
+| `models.NarrationEvent` | fala do narrador; mesma interface de duck-typing que `SpeechEvent` (o Orquestrador trata os dois no mesmo laço), só o `.track` difere. Entra sempre sequencial. |
+| `models.build_event` | dispatcher: lê `tipo_evento` (ou `personagem: "Narrador"`) e constrói o evento certo. Retrocompatível: sem discriminador = diálogo. |
+| `Placement.track` / `Timeline.to_dict` | a EDL carrega a trilha de cada evento. |
+| `renderer._render_tracks`/`_combine_tracks` | mixa um bed por trilha e os combina. Hoje soma simples (idêntico ao mono-bus); é o ponto onde o **ducking** entra na Fase 5, sem tocar no resto. |
+| `schema` | valida `tipo_evento` e dispensa `personagem` na narração (mantém estrito no diálogo). |
+
+Narração e diálogo compartilham o cursor temporal (num audiobook eles se alternam,
+não se sobrepõem); o `.track` só decide o bus de render/pan/ducking. Ver
+`examples/narrated_scene.py` (narrador→jeff, personagens→faber, EDL em 2 trilhas).
+
+## Camada Screenwriter — PASSAGEM 0 (implementado)
+
+A entrada do motor deixa de ser "falas prontas" e passa a ser a HISTÓRIA em prosa.
+
+| Peça | Papel |
+|---|---|
+| `narrative/screenwriter.py` | `RuleBasedScreenwriter`: mascara as aspas (a pontuação dentro da fala não corta a frase errada), segmenta em narração/diálogo, extrai locutor + **deixa** (verbo de fala) da atribuição, e detecta **gatilhos de ação** (rangeu→`porta_range`, explodiu→`explosao`) como sementes de SFX. Baseline determinístico; um `LlamaScreenwriter` cobriria os casos difíceis reusando o mesmo contrato. |
+| `director/base.py` | consome `elementos` (narração + diálogo) além do formato antigo `falas`; a deixa calibra a tensão (`gritou`→sobe, `sussurrou`→desce); ações passam para a cena como sementes. |
+| `orchestrator` (guard cross-track) | interrupção/sobreposição só valem DENTRO da mesma trilha — ninguém interrompe o narrador; cruzou de trilha → degrada p/ sequencial. |
+
+Cadeia completa (`examples/story_to_audio.py`): `prosa .txt → Screenwriter → Director
+→ Orquestrador → Renderer → áudio narrado multitrack`. As ações detectadas ficam
+prontas p/ virar `SfxEvent` na Fase 5.
+
 ## O que ainda NÃO existe (próximos passos)
 
-1. **Forced alignment** para o corte de interrupção: substituir o snap de energia
-   por fronteiras de fonema reais (aligner externo tipo whisperx/MFA, ou um modelo
-   Piper que exporte `phoneme_alignments`). É o degrau que o teste com áudio real
-   apontou — o snap resolve a maioria mas não todos os cortes.
-2. **Voz distinta por personagem** com modelo real por voz (o pitch por personagem
-   ajuda, mas não substitui timbres de modelos diferentes ou XTTS com clonagem).
-3. **Crossfade equal-power em `sobreposicao` longa** (hoje o equal-power cobre a
-   costura de interrupção; na fala simultânea prolongada as vozes dependem do limiter).
-4. QA acústico automatizado (clipping, overlaps que engolem palavras).
-5. Calibrar mais o `LlamaDirector`: o few-shot quebrou a saturação, mas o 1.5B ainda
-   subusa "baixa". Mais exemplos ou um modelo maior sharpeariam a escala.
+1. **SFX/foley + ambiência + ducking** (`SfxBackend`, `AmbienceLibrary`, sidechain).
+   Fase 5 — é onde o motor vira "história em texto → audiobook com sons".
+2. **Crossfade equal-power em `sobreposicao` longa** e calibração do `LlamaDirector`
+   (Fase 6). Ver `docs/ROADMAP.md`.
+
+## Visão: motor de áudio narrativo completo (roadmap)
+
+O alvo maior é o K-NAR deixar de ser um motor de *diálogo* e virar um motor de
+*áudio narrativo*: dada uma história em prosa (cenas, ações, diálogos), gerar o
+audiobook dramatizado inteiro — narração, vozes, foley (efeitos pontuais),
+ambiência e (futuro) música. O insight é que a EDL já é a peça certa: um SFX é só
+mais um evento na linha de tempo (início relativo, duração real, ganho, pan). As
+fases 3–6 generalizam `SpeechEvent` numa união `Event`, tornam a Timeline
+multitrack (buses de diálogo/foley/ambiência com ducking sidechain) e adicionam a
+PASSAGEM 0 (Screenwriter: prosa → grafo de cenas). Ver `docs/ROADMAP.md`.

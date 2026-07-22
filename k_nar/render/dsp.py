@@ -167,3 +167,17 @@ def peak_normalize(stereo: np.ndarray, target: float = 0.89) -> np.ndarray:
     if peak < 1e-9:
         return stereo
     return (stereo * (target / peak)).astype(np.float32)
+
+
+def clipping_stats(stereo: np.ndarray, ceiling: float = 0.999) -> dict:
+    """Mede pico e clipping da mixagem (alimenta `qa.check_mix`).
+
+    Devolve dado puro (dict de números) para o QA — que é stdlib — decidir o veredito
+    sem depender de numpy.
+    """
+    a = np.abs(np.asarray(stereo, dtype=np.float32))
+    size = int(a.size)
+    peak = float(a.max()) if size else 0.0
+    clipped = int((a >= ceiling).sum()) if size else 0
+    return {"peak": peak, "clipped_samples": clipped,
+            "clipped_ratio": (clipped / size) if size else 0.0}

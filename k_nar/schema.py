@@ -18,6 +18,9 @@ from k_nar.models import DramaticPause, EntryType
 
 _ENTRY_TYPES = {e.value for e in EntryType}
 _PAUSES = {p.value for p in DramaticPause}
+# Discriminador de evento (PASSAGEM 1 estendida): fala/diálogo ou narração.
+_EVENT_KINDS = {"fala", "dialogo", "narracao", "narrador"}
+_NARRATION_KINDS = {"narracao", "narrador"}
 
 
 class SchemaError(ValueError):
@@ -70,9 +73,17 @@ def validate_scene(d: Any, *, allow_numeric_tension: bool = True) -> None:
         else:
             seen_ids.add(eid)
 
+        # discriminador de evento (opcional; default = fala)
+        kind = str(ev.get("tipo_evento", ev.get("tipo", ""))).strip().lower()
+        if kind and kind not in _EVENT_KINDS:
+            errs.append(f"{p}.tipo_evento: {kind!r} nao esta em {sorted(_EVENT_KINDS)}")
+        is_narration = kind in _NARRATION_KINDS or \
+            str(ev.get("personagem", "")).strip().lower() in ("narrador", "narrator")
+
         if not ev.get("texto"):
             errs.append(f"{p}.texto: obrigatorio (nao vazio)")
-        if not ev.get("personagem"):
+        # narração dispensa `personagem` (default "Narrador"); diálogo exige.
+        if not is_narration and not ev.get("personagem"):
             errs.append(f"{p}.personagem: obrigatorio")
 
         # voz

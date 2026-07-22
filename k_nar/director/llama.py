@@ -63,8 +63,8 @@ class LlamaDirector(BaseDirector):
         self._fallback = RuleBasedDirector()
 
     # ------------------------------------------------------------------ #
-    def _decide(self, personagem, texto, index, prev_text) -> dict[str, Any]:
-        base = self._fallback._decide(personagem, texto, index, prev_text)  # rede de seguranca
+    def _decide(self, personagem, texto, index, prev_text, cue=None) -> dict[str, Any]:
+        base = self._fallback._decide(personagem, texto, index, prev_text, cue=cue)  # rede de seguranca
         raw = self._ask(texto, prev_text, index)
         parsed = _extract_json(raw)
         if not parsed:

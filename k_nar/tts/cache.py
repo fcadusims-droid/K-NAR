@@ -19,6 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
+from k_nar.align import Alignment, PhonemeSpan
 from k_nar.models import SpeechEvent
 from k_nar.tts.base import RenderedClip, TTSBackend
 
@@ -56,17 +57,40 @@ class CachingTTS:
                 duration_ms=int(data["duration_ms"]),
                 sample_rate=int(data["sample_rate"]),
                 samples=data["samples"],
+                alignment=self._load_alignment(data),
             )
 
         self.misses += 1
         clip = self.inner.synthesize(event)
         if clip.samples is not None:
-            np.savez(
-                path,
-                samples=np.asarray(clip.samples, dtype=np.float32),
-                duration_ms=np.int64(clip.duration_ms),
-                sample_rate=np.int64(clip.sample_rate),
-            )
+            np.savez(path, samples=np.asarray(clip.samples, dtype=np.float32),
+                     duration_ms=np.int64(clip.duration_ms),
+                     sample_rate=np.int64(clip.sample_rate),
+                     **self._dump_alignment(clip.alignment))
         # o event_id do cache é o do chamador (a mesma fala pode ter ids distintos)
         return RenderedClip(event.id, clip.duration_ms, sample_rate=clip.sample_rate,
-                            samples=clip.samples)
+                            samples=clip.samples, alignment=clip.alignment)
+
+    # ------------------------------------------------------------------ #
+    #  (De)serialização do forced alignment como arrays paralelos (sem pickle) #
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _dump_alignment(alignment: Alignment | None) -> dict:
+        if not alignment:
+            return {}
+        return {
+            "align_phonemes": np.array([s.phoneme for s in alignment.spans]),
+            "align_start": np.array([s.start for s in alignment.spans], dtype=np.int64),
+            "align_end": np.array([s.end for s in alignment.spans], dtype=np.int64),
+            "align_sr": np.int64(alignment.sample_rate),
+        }
+
+    @staticmethod
+    def _load_alignment(data) -> Alignment | None:
+        if "align_start" not in data:
+            return None  # cache antigo (pré forced alignment): cai no snap de energia
+        phon = [str(p) for p in data["align_phonemes"]]
+        starts = data["align_start"]
+        ends = data["align_end"]
+        spans = [PhonemeSpan(phon[i], int(starts[i]), int(ends[i])) for i in range(len(phon))]
+        return Alignment(spans=spans, sample_rate=int(data["align_sr"]))
