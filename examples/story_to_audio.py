@@ -74,8 +74,11 @@ def main() -> None:
     policy = TimingPolicy()
     backend, sr, kind = _backend(prosody)
     print(f"\n[tts] {kind}")
-    timeline = Orquestrador(backend, policy, prosody=prosody).render_scene(scene)
-    samples = {ev.id: backend.synthesize(ev).samples for ev in scene.events}
+    # sintetiza UMA vez e passa os clips à passagem 3 (a timeline nunca re-sintetiza;
+    # evita duplicar a síntese e garante que timeline e áudio usem o MESMO clip).
+    clips = {ev.id: backend.synthesize(ev) for ev in scene.events}
+    timeline = Orquestrador(backend, policy, prosody=prosody).render_scene(scene, clips=clips)
+    samples = {eid: c.samples for eid, c in clips.items()}
 
     print(f"\n--- TIMELINE MULTITRACK ({_fmt(timeline.total_duration_ms)}) ---")
     for p in timeline.placements:

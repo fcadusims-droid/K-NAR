@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from k_nar.models import SpeechEvent
+from k_nar.models import TENSION_LABELS, SpeechEvent
 from k_nar.tts.base import RenderedClip
 
 # "Vozes": F0 base (Hz) e trio de formantes (Hz) por personagem. Timbres distintos.
@@ -118,10 +118,9 @@ class FormantTTSBackend:
     # ------------------------------------------------------------------ #
     @staticmethod
     def _tension(value) -> float:
-        labels = {"baixa": 0.15, "media": 0.5, "alta": 0.8, "extrema": 1.0}
         if isinstance(value, (int, float)):
             return float(min(max(value, 0.0), 1.0))
-        return labels.get(str(value).strip().lower(), 0.0)
+        return TENSION_LABELS.get(str(value).strip().lower(), 0.0)
 
     def _syllable_envelope(self, n: int, syllables: int, rate: float, tension: float) -> np.ndarray:
         """Um envelope com `syllables` bumps raised-cosine — cadência de fala."""
