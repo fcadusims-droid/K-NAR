@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from k_nar.models import TENSION_LABELS
+
 
 def _lerp(a: float, b: float, t: float) -> float:
     return a + (b - a) * t
@@ -93,7 +95,6 @@ class ProsodyPolicy:
     # tensão pode chegar como rótulo ou número
     @staticmethod
     def tension_scalar(value) -> float:
-        labels = {"baixa": 0.15, "media": 0.5, "alta": 0.8, "extrema": 1.0}
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             return _clamp(float(value), 0.0, 1.0)
-        return labels.get(str(value).strip().lower(), 0.0)
+        return TENSION_LABELS.get(str(value).strip().lower(), 0.0)

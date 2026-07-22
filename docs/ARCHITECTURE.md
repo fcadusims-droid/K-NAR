@@ -27,9 +27,13 @@ A solução é separar **intenção** de **alocação temporal** em duas passage
     Cruza metadado relativo x duracao real -> Timeline (EDL, dados puros).
             |
             v
-[FUTURO: Environment DSP]
-    Reverb convolutivo (IR por cena) + panning -> audio final coeso.
+[PASSAGEM 4: Environment DSP]  (implementado)
+    Reverb convolutivo (IR por cena) + panning + mix multitrack -> audio final coeso.
 ```
+
+> Nota: este diagrama é o núcleo original (só diálogo). O motor hoje tem também a
+> PASSAGEM 0 (Screenwriter: prosa → roteiro) e trilhas de narração/SFX. Ver as seções
+> "Camada Screenwriter" e "Generalização para áudio narrativo" abaixo, e `docs/ROADMAP.md`.
 
 > A intenção dramática (agressividade `0.25`) vem do LLM. A **matemática dos
 > milissegundos** é resolvida pelo código, já sabendo a duração real. Assim, se a

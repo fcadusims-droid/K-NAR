@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from k_nar.models import DramaticPause, ExitDynamics
+from k_nar.models import TENSION_LABELS, DramaticPause, ExitDynamics
 
 
 def _clamp(value: float, low: float, high: float) -> float:
@@ -36,13 +36,9 @@ class TimingPolicy:
     )
 
     # Rótulos qualitativos de tensão -> escalar 0..1 (usado pelo TTS, resolvido aqui).
+    # Default vem da fonte única em models.TENSION_LABELS; sobrescrevível por "estilo".
     tension_labels: dict[str, float] = field(
-        default_factory=lambda: {
-            "baixa": 0.15,
-            "media": 0.50,
-            "alta": 0.80,
-            "extrema": 1.00,
-        }
+        default_factory=lambda: dict(TENSION_LABELS)
     )
 
     # --- Guardas de inteligibilidade (o item "QA" que impede engolir a fala) ---

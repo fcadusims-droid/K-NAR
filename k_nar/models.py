@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Union
 
 
 class EntryType(str, Enum):
@@ -43,6 +43,11 @@ class Track(str, Enum):
     SFX = "sfx"
     AMBIENCE = "ambiencia"
     MUSIC = "musica"
+
+
+# Rótulos qualitativos de tensão -> escalar 0..1. FONTE ÚNICA, lida pelo TimingPolicy
+# (default sobrescrevível por "estilo de direção"), pela ProsodyPolicy e pelo Formant.
+TENSION_LABELS = {"baixa": 0.15, "media": 0.5, "alta": 0.8, "extrema": 1.0}
 
 
 def _as_float(value: Any, default: float) -> float:
@@ -176,8 +181,10 @@ class NarrationEvent:
         )
 
 
-# Evento de linha de tempo (união). Por ora fala/narração; SFX/ambiência nas fases 5+.
-Event = SpeechEvent  # alias de tipo pragmático (duck-typing); ver NarrationEvent
+# Evento de linha de tempo (união de tipos). Por ora fala/narração; SFX/ambiência
+# entram na Fase 5. `SpeechEvent` e `NarrationEvent` compartilham a interface de
+# duck-typing que o Orquestrador consome (.id/.character/.text/.voice/.entry/.exit/.pan/.track).
+Event = Union[SpeechEvent, NarrationEvent]
 
 # Dispatcher: lê o discriminador do JSON e constrói o evento certo.
 _EVENT_BUILDERS = {
