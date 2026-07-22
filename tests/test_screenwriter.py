@@ -54,8 +54,9 @@ class TestSegmentation(unittest.TestCase):
 
 class TestScreenwriterToDirectorToScene(unittest.TestCase):
     def test_full_chain_produces_valid_scene(self):
-        prose = ('A nave tremia. "Segurem-se!", gritou a Comandante. '
-                 'O casco gemeu sob a pressao.')
+        # prosa sem gatilhos de som (foco em narração + diálogo)
+        prose = ('O quarto estava escuro. "Segurem-se!", gritou a Comandante. '
+                 'Ela fechou os olhos com forca.')
         script = _write(prose)
         scene_dict = RuleBasedDirector().direct(script)
         validate_scene(scene_dict)  # portão estrito
@@ -74,10 +75,49 @@ class TestScreenwriterToDirectorToScene(unittest.TestCase):
         self.assertGreater(ordem[t_gritada], ordem[t_neutra])
 
     def test_narration_events_are_sequential(self):
-        script = _write("A cidade dormia. O relogio bateu meia-noite.")
+        script = _write("O tempo passava devagar. A tarde caia sobre o vale.")
         scene = RuleBasedDirector().direct(script)
-        for ev in scene["eventos"]:
+        narracoes = [e for e in scene["eventos"] if e.get("tipo_evento") == "narracao"]
+        self.assertTrue(narracoes)
+        for ev in narracoes:
             self.assertEqual(ev["entrada"]["tipo"], "sequencial")
+
+    def test_sound_cue_becomes_sfx_not_narration(self):
+        # a IDEIA central: "passos numa poca" vira SOM, o narrador NÃO lê
+        out = _write("Passos numa poca d'agua.")
+        tipos = [e["tipo"] for e in out["elementos"]]
+        self.assertIn("sfx", tipos)
+        self.assertNotIn("narracao", tipos)
+        sfx = next(e for e in out["elementos"] if e["tipo"] == "sfx")
+        self.assertEqual(sfx["tag"], "passos_poca")
+
+    def test_ambience_bed_detected(self):
+        out = _write("A floresta noturna se estendia ao redor.")
+        amb = [e for e in out["elementos"] if e["tipo"] == "ambiencia"]
+        self.assertEqual(len(amb), 1)
+        self.assertEqual(amb[0]["tag"], "floresta_noite")
+
+    def test_ambience_deduped(self):
+        out = _write("Chovia forte. A chuva batia no vidro. Chovia sem parar.")
+        amb = [e for e in out["elementos"] if e["tipo"] == "ambiencia"]
+        self.assertEqual(len(amb), 1)  # uma cama de chuva, não três
+
+    def test_narrator_optional_radiodrama(self):
+        prose = 'A floresta escura. "Corram!", gritou o guia. Um tiro soou.'
+        com = RuleBasedScreenwriter().write(prose, narrator=True)
+        sem = RuleBasedScreenwriter().write(prose, narrator=False)
+        self.assertTrue(any(e["tipo"] == "narracao" for e in com["elementos"]))
+        self.assertFalse(any(e["tipo"] == "narracao" for e in sem["elementos"]))
+        # diálogo e som permanecem mesmo sem narrador
+        self.assertTrue(any(e["tipo"] == "fala" for e in sem["elementos"]))
+        self.assertTrue(any(e["tipo"] in ("sfx", "ambiencia") for e in sem["elementos"]))
+
+    def test_narrated_sentence_with_name_still_narrated(self):
+        # frase com nome próprio + som não é "som puro": narra E emite o SFX
+        out = _write("Ana ouviu a porta que rangeu ao fundo do corredor.")
+        tipos = [e["tipo"] for e in out["elementos"]]
+        self.assertIn("narracao", tipos)
+        self.assertIn("sfx", tipos)
 
     def test_action_cues_passed_to_scene(self):
         script = _write("A porta rangeu bem devagar.")

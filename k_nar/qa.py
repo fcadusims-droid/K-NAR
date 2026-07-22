@@ -36,6 +36,9 @@ class QAIssue:
 # Frações de referência (poderiam virar campos de política se precisar afinar).
 _SWALLOW_FRACTION = 0.85   # sobreposição que cobre >85% da fala mais curta = engolida
 _CLIP_CEILING = 0.999      # |amostra| >= isto conta como clipada
+# As checagens de sobreposição valem só entre FALAS: SFX e ambiência coexistem com
+# a fala DE PROPÓSITO (o ducking cuida do nível), então não são "cruzamento".
+_SPEECH_TRACKS = ("dialogo", "narracao")
 
 
 def check_timeline(timeline, policy=None) -> list[QAIssue]:
@@ -54,8 +57,10 @@ def check_timeline(timeline, policy=None) -> list[QAIssue]:
                 f"corte deixa só {audible}ms audíveis (< mínimo {min_audible}ms)",
                 (p.event_id,)))
 
-    # 2) Sobreposições: engolir palavras e cruzamentos não-intencionais.
-    ordered = sorted(timeline.placements, key=lambda p: p.start_ms)
+    # 2) Sobreposições ENTRE FALAS: engolir palavras e cruzamentos não-intencionais.
+    #    (SFX/ambiência coexistem com a fala de propósito — o ducking resolve o nível.)
+    ordered = sorted((p for p in timeline.placements if p.track in _SPEECH_TRACKS),
+                     key=lambda p: p.start_ms)
     for i, a in enumerate(ordered):
         for b in ordered[i + 1:]:
             if b.start_ms >= a.natural_end_ms:

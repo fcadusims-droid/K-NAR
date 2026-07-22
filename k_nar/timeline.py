@@ -57,6 +57,9 @@ class TimingPolicy:
     # Micro-fades nas bordas de toda fala: matam o clique digital de descontinuidade.
     edge_fade_in_ms: int = 8
     edge_fade_out_ms: int = 12
+    # Fades LONGOS da cama de ambiência: entra/sai suave (não é clique de borda).
+    ambience_fade_in_ms: int = 300
+    ambience_fade_out_ms: int = 700
     # Fade do CORTE de interrupção: rápido, mas suave o bastante p/ não estalar.
     interruption_fade_ms: int = 32
     # A fala que ENTRA interrompendo sobe por cima da cauda da anterior ("swell").

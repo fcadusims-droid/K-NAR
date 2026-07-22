@@ -1,20 +1,22 @@
-"""Fase 4: HISTÓRIA em prosa → audiobook dramatizado (a cadeia completa).
+"""Fase 5: HISTÓRIA em prosa → AUDIODRAMA completo (vozes + SFX + ambiência).
 
     prosa .txt
-       │  PASSAGEM 0  Screenwriter  (segmenta narração / diálogo / ações)
+       │  PASSAGEM 0  Screenwriter   (narração / diálogo / SFX / ambiência)
+       ▼                              — descrição sonora vira SOM, não narração;
+    roteiro estruturado                 narrador é OPCIONAL (--sem-narrador)
+       │  PASSAGEM 1  Director        (tensão / entrada / pausa por fala)
        ▼
-    roteiro estruturado
-       │  PASSAGEM 1  Director       (dá tensão / entrada / pausa por elemento)
+    cena (fala + som, validada)
+       │  PASSAGENS 2-3  Orquestrador  (fala→TTS, som→SfxBackend; EDL multitrack)
        ▼
-    cena JSON (narração + diálogo, validada)
-       │  PASSAGENS 2-3  Orquestrador (duração real → EDL multitrack)
-       ▼
-    Timeline  ──►  Renderer  ──►  áudio narrado (narrador + vozes, trilhas separadas)
+    Timeline  ──►  Renderer (DUCKING)  ──►  audiodrama
+       (ambiência/SFX afundam sob a fala; um som não estraga o outro)
 
-    python -m examples.story_to_audio [historia.txt]
+    python -m examples.story_to_audio [historia.txt] [--sem-narrador]
 
-Usa Piper se as vozes existirem (narrador→jeff, personagens→faber); senão, formante
-sintético (sem baixar nada). As "ações" detectadas viram sementes de SFX (Fase 5).
+Sons: `ProceduralSfxBackend` (síntese, sem baixar nada) por padrão; troque por
+`LibrarySfxBackend(manifest)` para usar samples REAIS. Vozes: Piper se houver
+modelos, senão formante.
 """
 
 from __future__ import annotations
@@ -28,12 +30,14 @@ from k_nar.director import RuleBasedDirector
 from k_nar.narrative import RuleBasedScreenwriter
 from k_nar.render import dsp
 from k_nar.render.renderer import TimelineRenderer
+from k_nar.sfx import ProceduralSfxBackend
 
 FABER = "models/piper/pt_BR-faber-medium.onnx"
 JEFF = "models/piper/pt_BR-jeff-medium.onnx"
+_SOUND_TRACKS = {Track.SFX.value, Track.AMBIENCE.value}
 
 
-def _backend(prosody):
+def _voice_backend(prosody, sr_hint=22050):
     if Path(FABER).exists():
         from k_nar.tts.cache import CachingTTS
         from k_nar.tts.multivoice import MultiVoiceTTSBackend, VoiceProfile
@@ -50,51 +54,56 @@ def _fmt(ms: int) -> str:
 
 
 def main() -> None:
-    historia = Path(sys.argv[1]) if len(sys.argv) > 1 else \
-        Path(__file__).parent / "historia_exemplo.txt"
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    narrator = "--sem-narrador" not in sys.argv
+    historia = Path(args[0]) if args else Path(__file__).parent / "historia_sonora.txt"
     prose = historia.read_text("utf-8").strip()
 
-    # PASSAGEM 0: prosa → roteiro estruturado
+    # PASSAGEM 0
     script = RuleBasedScreenwriter().write(
-        prose, scene_id=historia.stem, ambiance="cockpit_metalico_eco")
-    print("--- PASSAGEM 0: Screenwriter ---")
+        prose, scene_id=historia.stem, ambiance="cockpit_metalico_eco", narrator=narrator)
+    print(f"--- PASSAGEM 0: Screenwriter (narrador={'on' if narrator else 'OFF'}) ---")
     for el in script["elementos"]:
-        tag = "🎙️ NARR" if el["tipo"] == "narracao" else f"💬 {el.get('personagem','?')}"
-        deixa = f"  ({el['deixa']})" if el.get("deixa") else ""
-        print(f"  {tag:<14} {el['texto']!r}{deixa}")
-    if script["acoes"]:
-        print("  ações→SFX (Fase 5):", [a["gatilho"] for a in script["acoes"]])
+        icon = {"fala": "💬", "narracao": "🎙️", "sfx": "🔊", "ambiencia": "🌲"}.get(el["tipo"], "?")
+        who = el.get("personagem") or el.get("tag") or ""
+        print(f"  {icon} {el['tipo']:<9} {who:<14} {el.get('texto','')[:52]!r}")
 
-    # PASSAGEM 1: Director
-    scene_dict = RuleBasedDirector().direct(script)
-    scene = Scene.from_dict(scene_dict)
+    # PASSAGEM 1
+    scene = Scene.from_dict(RuleBasedDirector().direct(script))
 
-    # PASSAGENS 2-3: Orquestrador
+    # PASSAGENS 2-3: fala via TTS, som via SfxBackend
     prosody = ProsodyPolicy()
     policy = TimingPolicy()
-    backend, sr, kind = _backend(prosody)
-    print(f"\n[tts] {kind}")
-    # sintetiza UMA vez e passa os clips à passagem 3 (a timeline nunca re-sintetiza;
-    # evita duplicar a síntese e garante que timeline e áudio usem o MESMO clip).
-    clips = {ev.id: backend.synthesize(ev) for ev in scene.events}
-    timeline = Orquestrador(backend, policy, prosody=prosody).render_scene(scene, clips=clips)
+    voice, sr, kind = _voice_backend(prosody)
+    sfxb = ProceduralSfxBackend(sr=sr)
+    print(f"\n[voz] {kind}   [som] procedural")
+
+    clips = {}
+    for ev in scene.events:
+        clips[ev.id] = sfxb.render(ev) if _track_name(ev) in _SOUND_TRACKS else voice.synthesize(ev)
+    timeline = Orquestrador(voice, policy, prosody=prosody).render_scene(scene, clips=clips)
     samples = {eid: c.samples for eid, c in clips.items()}
 
     print(f"\n--- TIMELINE MULTITRACK ({_fmt(timeline.total_duration_ms)}) ---")
     for p in timeline.placements:
-        faixa = "🎙️" if p.track == Track.NARRATION.value else "💬"
-        cut = f"  [corte: {p.cut_method}]" if p.hard_cut_ms is not None else ""
-        print(f"  {_fmt(p.start_ms)} {_fmt(p.end_ms)} {faixa} {p.character:<11}{cut}")
+        icon = {"dialogo": "💬", "narracao": "🎙️", "sfx": "🔊", "ambiencia": "🌲"}.get(p.track, "?")
+        span = "cena inteira" if p.track == "ambiencia" else f"{_fmt(p.start_ms)}→{_fmt(p.end_ms)}"
+        print(f"  {icon} {p.track:<10} {span:<22} {p.character or p.text}")
 
     renderer = TimelineRenderer(sr=sr, policy=policy)
     stereo = renderer.render(timeline, samples, mode="full")
     out = Path("build_audio"); out.mkdir(exist_ok=True)
-    renderer.write_wav(str(out / "story_full.wav"), stereo)
+    renderer.write_wav(str(out / "audiodrama.wav"), stereo)
 
     print("\n--- QA ---")
     issues = check_timeline(timeline, policy) + check_mix(dsp.clipping_stats(stereo))
     print(format_report(issues))
-    print(f"\naudio: {(out / 'story_full.wav').resolve()}  ({stereo.shape[1]/sr:.2f}s)")
+    print(f"\naudio: {(out / 'audiodrama.wav').resolve()}  ({stereo.shape[1]/sr:.2f}s)")
+
+
+def _track_name(ev) -> str:
+    t = getattr(ev, "track", None)
+    return getattr(t, "value", t) or "dialogo"
 
 
 if __name__ == "__main__":

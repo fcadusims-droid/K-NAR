@@ -8,6 +8,7 @@ O core é stdlib puro: nenhuma dependência de áudio para calcular o ritmo.
 
 from k_nar.align import Alignment, PhonemeSpan
 from k_nar.models import (
+    AmbienceEvent,
     DramaticPause,
     EntryDynamics,
     EntryType,
@@ -15,6 +16,7 @@ from k_nar.models import (
     ExitDynamics,
     NarrationEvent,
     Scene,
+    SfxEvent,
     SpeechEvent,
     Track,
     VoiceParams,
@@ -30,6 +32,7 @@ from k_nar.tts.mock import MockTTSBackend
 
 __all__ = [
     "Alignment",
+    "AmbienceEvent",
     "DramaticPause",
     "EntryDynamics",
     "EntryType",
@@ -37,6 +40,7 @@ __all__ = [
     "ExitDynamics",
     "MockTTSBackend",
     "NarrationEvent",
+    "SfxEvent",
     "Orquestrador",
     "Placement",
     "PhonemeSpan",

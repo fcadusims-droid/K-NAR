@@ -10,10 +10,18 @@ produz áudio: devolve uma `Timeline` de dados puros, que o DSP renderiza depois
 
 from __future__ import annotations
 
-from k_nar.models import EntryType, Scene
+from k_nar.models import EntryType, Scene, Track
 from k_nar.prosody import ProsodyPolicy
 from k_nar.timeline import Placement, Timeline, TimingPolicy
 from k_nar.tts.base import RenderedClip, TTSBackend
+
+_SPEECH_TRACKS = {Track.DIALOGUE.value, Track.NARRATION.value}
+
+
+def _track_of(ev) -> str:
+    """Nome da trilha de um evento (aceita Enum Track ou string)."""
+    t = getattr(ev, "track", None)
+    return getattr(t, "value", t) or "dialogo"
 
 
 class Orquestrador:
@@ -34,23 +42,32 @@ class Orquestrador:
         `tts.batch.synthesize_all`), evitando que a passagem 2 lenta bloqueie o
         fluxo. Se omitido, sintetiza serialmente (comportamento padrão).
         """
-        # PASSAGEM 2 — síntese "seca" + medição da duração REAL de cada fala.
-        if clips is None:
-            clips = {ev.id: self.tts.synthesize(ev) for ev in scene.events}
+        # Ambiência é uma CAMA (bed): cobre a cena inteira, não entra na sequência
+        # temporal. Separa-se dos eventos sequenciáveis (fala + SFX pontual).
+        sequenced = [ev for ev in scene.events if _track_of(ev) != Track.AMBIENCE.value]
+        ambience = [ev for ev in scene.events if _track_of(ev) == Track.AMBIENCE.value]
 
-        # PASSAGEM 3 — alocação temporal.
+        # PASSAGEM 2 — síntese/render "seco" + medição da duração REAL (só fala; SFX e
+        # ambiência devem chegar em `clips`, renderizados pelo SfxBackend do chamador).
+        if clips is None:
+            clips = {ev.id: self.tts.synthesize(ev)
+                     for ev in sequenced if _track_of(ev) in _SPEECH_TRACKS}
+
+        # PASSAGEM 3 — alocação temporal dos eventos sequenciáveis.
         placements: list[Placement] = []
-        cursor_ms = 0          # ponto onde a próxima fala começaria "naturalmente"
+        cursor_ms = 0          # ponto onde o próximo evento começaria "naturalmente"
         prev: Placement | None = None
         prev_clip: RenderedClip | None = None
 
-        for ev in scene.events:
-            clip = clips[ev.id]
-            cur_track = getattr(getattr(ev, "track", None), "value", "dialogo")
+        for ev in sequenced:
+            clip = clips.get(ev.id)
+            if clip is None:
+                continue  # sem áudio (ex.: SFX não renderizado): ignora silenciosamente
+            cur_track = _track_of(ev)
 
             # Interrupção/sobreposição só valem DENTRO da mesma trilha: personagem
             # atropela personagem, mas ninguém interrompe o narrador (nem a narração
-            # atropela o diálogo). Cruzou de trilha -> degrada p/ sequencial.
+            # atropela o diálogo, nem um SFX corta a fala). Cruzou -> degrada p/ sequencial.
             etype = ev.entry.type
             if prev is not None and prev.track != cur_track and \
                     etype in (EntryType.INTERRUPTION, EntryType.OVERLAP):
@@ -64,16 +81,13 @@ class Orquestrador:
                 start_ms=start_ms,
                 duration_ms=clip.duration_ms,
                 pan=ev.pan,
-                text=ev.text,
+                text=ev.text or getattr(ev, "tag", ""),
                 track=cur_track,
-                # Bordas: micro-fades anti-clique em toda fala.
+                # Bordas: micro-fades anti-clique em todo evento.
                 fade_in_ms=self.policy.edge_fade_in_ms,
                 fade_out_ms=self.policy.edge_fade_out_ms,
                 entry_type=etype.value,
-                # Dinâmica: ganho por tensão, coerente com o pitch/rate do TTS.
-                gain_db=self.prosody.resolve(
-                    ProsodyPolicy.tension_scalar(ev.voice.tension)
-                ).gain_db,
+                gain_db=self._gain_of(ev),
             )
 
             # Interrupção: esta fala SOBE sobre a cauda da anterior ("swell") e
@@ -92,19 +106,40 @@ class Orquestrador:
 
             placements.append(placement)
 
-            # Avança o cursor: fim EFETIVO desta fala + pausa dramática de saída.
+            # Avança o cursor: fim EFETIVO deste evento + pausa dramática de saída.
             pause = self.policy.pause_ms(ev.exit)
             cursor_ms = placement.natural_end_ms + pause
             prev = placement
             prev_clip = clip
 
         total = max((p.natural_end_ms for p in placements), default=0)
+
+        # Ambiência: um placement por cama, cobrindo [0, total]. O renderer faz o
+        # loop do sample até preencher; o ducking a faz afundar sob a fala.
+        for amb in ambience:
+            placements.append(Placement(
+                event_id=amb.id, character="", start_ms=0, duration_ms=total,
+                pan=0, text=getattr(amb, "tag", ""), track=Track.AMBIENCE.value,
+                # fades longos: a cama entra/sai suave (não é um clique de borda).
+                fade_in_ms=self.policy.ambience_fade_in_ms,
+                fade_out_ms=self.policy.ambience_fade_out_ms,
+                gain_db=getattr(amb, "gain_db", -20.0),
+            ))
+
         return Timeline(
             scene_id=scene.id,
             ambiance=scene.ambiance,
             placements=placements,
             total_duration_ms=total,
         )
+
+    # ------------------------------------------------------------------ #
+    def _gain_of(self, ev) -> float:
+        """Ganho de dinâmica do evento: por tensão (fala, coerente c/ o TTS) ou o
+        ganho fixo do próprio evento (SFX)."""
+        if hasattr(ev, "voice"):
+            return self.prosody.resolve(ProsodyPolicy.tension_scalar(ev.voice.tension)).gain_db
+        return float(getattr(ev, "gain_db", 0.0))
 
     # ------------------------------------------------------------------ #
     def _resolve_cut(self, prev: Placement, prev_clip: RenderedClip | None,

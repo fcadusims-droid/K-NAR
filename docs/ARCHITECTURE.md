@@ -269,16 +269,40 @@ A entrada do motor deixa de ser "falas prontas" e passa a ser a HISTÓRIA em pro
 | `director/base.py` | consome `elementos` (narração + diálogo) além do formato antigo `falas`; a deixa calibra a tensão (`gritou`→sobe, `sussurrou`→desce); ações passam para a cena como sementes. |
 | `orchestrator` (guard cross-track) | interrupção/sobreposição só valem DENTRO da mesma trilha — ninguém interrompe o narrador; cruzou de trilha → degrada p/ sequencial. |
 
-Cadeia completa (`examples/story_to_audio.py`): `prosa .txt → Screenwriter → Director
-→ Orquestrador → Renderer → áudio narrado multitrack`. As ações detectadas ficam
-prontas p/ virar `SfxEvent` na Fase 5.
+Cadeia completa: `prosa .txt → Screenwriter → Director → Orquestrador → Renderer`.
+
+## SFX + ambiência + ducking — SOM REAL (implementado)
+
+Aqui o motor vira o que a visão pede: **história em texto → audiodrama com sons**. O
+princípio é CITAR áudio real (biblioteca), não gerar tudo com IA — o Orquestrador e o
+renderer não sabem se o som veio de um sample ou de síntese (mesmo truque do TTS).
+
+| Peça | Papel |
+|---|---|
+| `models.SfxEvent` / `AmbienceEvent` | som PONTUAL (foley, duração real do sample, sequenciado) e CAMA ambiental (cobre a cena, loopável, baixa). Compartilham a interface de duck-typing do Orquestrador. |
+| `sfx/base.py::SfxBackend` | contrato agnóstico (espelha `TTSBackend`): `render(event) → RenderedClip`. |
+| `sfx/library.py::LibrarySfxBackend` | **áudio real** por tag (manifesto → arquivo), com fallback auditável; é o baseline de produção. |
+| `sfx/procedural.py::ProceduralSfxBackend` | síntese determinística por tag (tiro, vento, passos_poca…) — o stand-in runnable, como o `FormantTTS` p/ voz. |
+| `orchestrator` | posiciona SFX na sequência (fala pode reagir ao som) e ambiência como bed [0, total]; ganho por evento (não por tensão) p/ som. |
+| `renderer._combine_tracks` (DUCKING) | a fala é a chave; ambiência/SFX/música afundam sob ela (`duck_db`) e voltam quando ela pára — via envelope de presença. É a mixagem profissional que impede a cacofonia. Ambiência é tiled p/ cobrir a cena. |
+
+**Screenwriter refinado** (a descrição sonora vira SOM, não narração): cada frase é
+classificada em diálogo / narração / **SFX** (som pontual) / **ambiência** (cenário
+contínuo). "Passos numa poça d'água" vira efeito e o narrador NÃO o lê. O **narrador
+é opcional** (`narrator=False` → modo radiodrama: só vozes + sons). `check_timeline`
+só cobra sobreposição entre FALAS (som coexiste de propósito; o ducking resolve o nível).
+
+**Diálogo reativo ao som**: como o SFX tem duração real medida, uma fala é ancorada
+para reagir a ele (soldado grita → tiro → recruta reage) — a reação é resolvida no
+render offline. Ver `examples/story_to_audio.py` (com `--sem-narrador`).
 
 ## O que ainda NÃO existe (próximos passos)
 
-1. **SFX/foley + ambiência + ducking** (`SfxBackend`, `AmbienceLibrary`, sidechain).
-   Fase 5 — é onde o motor vira "história em texto → audiobook com sons".
-2. **Crossfade equal-power em `sobreposicao` longa** e calibração do `LlamaDirector`
-   (Fase 6). Ver `docs/ROADMAP.md`.
+1. **Música/trilha** como mais uma trilha ducada; **crossfade equal-power em
+   `sobreposicao` longa**; **"diretor de mix"** (níveis relativos como matriz de
+   política); calibração do `LlamaDirector`; `NeuralSfxBackend` (texto→áudio). Fase 6.
+2. **Sincronia fina SFX↔verbo** via forced alignment sobre a narração (hoje o SFX
+   entra na sequência, não no fonema exato do verbo). Ver `docs/ROADMAP.md`.
 
 ## Visão: motor de áudio narrativo completo (roadmap)
 

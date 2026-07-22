@@ -31,11 +31,17 @@ except Exception:  # pragma: no cover
 
 
 class TimelineRenderer:
+    # Trilhas que formam a "chave" do ducking (a fala manda) e as que afundam.
+    _KEY_TRACKS = ("dialogo", "narracao")
+    _DUCKED_TRACKS = ("ambiencia", "sfx", "musica")
+
     def __init__(self, sr: int = 24000, policy: TimingPolicy | None = None,
-                 reverb_wet: float = 0.30):
+                 reverb_wet: float = 0.30, duck_db: float = -12.0):
         self.sr = sr
         self.policy = policy or TimingPolicy()
         self.reverb_wet = reverb_wet
+        # Profundidade do ducking: quanto ambiência/SFX/música afundam sob a fala.
+        self.duck_db = duck_db
 
     # ------------------------------------------------------------------ #
     def _ms(self, ms: float) -> int:
@@ -70,7 +76,11 @@ class TimelineRenderer:
             mono = clips.get(p.event_id)
             if mono is None or len(mono) == 0:
                 continue
-            stereo = self._place(p, np.asarray(mono, dtype=np.float32), mode)
+            mono = np.asarray(mono, dtype=np.float32)
+            # Ambiência é uma CAMA: faz o loop do sample até cobrir a cena inteira.
+            if p.track == "ambiencia":
+                mono = self._tile(mono, self._ms(p.duration_ms))
+            stereo = self._place(p, mono, mode)
             bed = beds.get(p.track)
             if bed is None:
                 bed = np.zeros((2, total), dtype=np.float32)
@@ -78,15 +88,51 @@ class TimelineRenderer:
             self._overlay(bed, stereo, self._ms(p.start_ms))
         return beds
 
+    @staticmethod
+    def _tile(mono: np.ndarray, n: int) -> np.ndarray:
+        """Repete `mono` (com crossfade nas emendas) até ter `n` amostras."""
+        if len(mono) == 0 or n <= 0:
+            return mono[:0]
+        if len(mono) >= n:
+            return mono[:n]
+        reps = int(np.ceil(n / len(mono)))
+        return np.tile(mono, reps)[:n].astype(np.float32)
+
     def _combine_tracks(self, beds: dict[str, np.ndarray], total: int) -> np.ndarray:
-        """Combina os beds de trilha num só. Fase 3: soma. Fase 5: ducking sidechain
-        (ambiência/música afundam sob a fala) entra aqui, sem tocar no resto."""
+        """Combina os beds por DUCKING sidechain: a fala (diálogo+narração) é a chave,
+        e ambiência/SFX/música afundam quando ela soa e voltam quando ela pára. É a
+        mixagem profissional que impede a cacofonia — um som não estraga o outro."""
         if not beds:
             return np.zeros((2, total), dtype=np.float32)
-        mix = np.zeros((2, total), dtype=np.float32)
-        for bed in beds.values():
-            mix += bed
+
+        speech = np.zeros((2, total), dtype=np.float32)
+        for name in self._KEY_TRACKS:
+            if name in beds:
+                speech += beds[name]
+
+        gain = self._duck_gain(speech)   # (total,) em [floor, 1], 1 = sem fala
+
+        mix = speech.copy()
+        for name, bed in beds.items():
+            if name in self._KEY_TRACKS:
+                continue
+            mix += bed * gain if gain is not None else bed
         return mix
+
+    def _duck_gain(self, speech: np.ndarray) -> np.ndarray | None:
+        """Curva de ganho (por amostra) para as trilhas duckadas, a partir do
+        ENVELOPE de presença da fala. Suavização simétrica (~120ms) — barata e
+        estável; o "diretor de mix" da Fase 6 pode refinar ataque/release."""
+        energy = np.mean(np.abs(speech), axis=0)
+        if float(energy.max()) < 1e-6:
+            return None  # sem fala: nada a duckar
+        win = max(1, int(0.12 * self.sr))
+        kernel = np.hanning(win)
+        kernel /= kernel.sum()
+        env = np.convolve(energy, kernel, mode="same")
+        env /= (float(env.max()) or 1.0)
+        floor = 10.0 ** (self.duck_db / 20.0)     # ganho mínimo sob fala plena
+        return (1.0 - (1.0 - floor) * env).astype(np.float32)
 
     # ------------------------------------------------------------------ #
     def _place(self, p: Placement, mono: np.ndarray, mode: str) -> np.ndarray:

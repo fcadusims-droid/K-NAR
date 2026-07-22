@@ -18,9 +18,10 @@ from k_nar.models import DramaticPause, EntryType
 
 _ENTRY_TYPES = {e.value for e in EntryType}
 _PAUSES = {p.value for p in DramaticPause}
-# Discriminador de evento (PASSAGEM 1 estendida): fala/diálogo ou narração.
-_EVENT_KINDS = {"fala", "dialogo", "narracao", "narrador"}
+# Discriminador de evento: fala/diálogo, narração, ou som (SFX/ambiência).
 _NARRATION_KINDS = {"narracao", "narrador"}
+_SOUND_KINDS = {"sfx", "som", "efeito", "ambiencia", "ambience", "ambiente"}
+_EVENT_KINDS = {"fala", "dialogo"} | _NARRATION_KINDS | _SOUND_KINDS
 
 
 class SchemaError(ValueError):
@@ -77,6 +78,13 @@ def validate_scene(d: Any, *, allow_numeric_tension: bool = True) -> None:
         kind = str(ev.get("tipo_evento", ev.get("tipo", ""))).strip().lower()
         if kind and kind not in _EVENT_KINDS:
             errs.append(f"{p}.tipo_evento: {kind!r} nao esta em {sorted(_EVENT_KINDS)}")
+
+        # SOM (SFX/ambiência): exige `tag`, não `texto`/`personagem`/`voz`.
+        if kind in _SOUND_KINDS:
+            if not (ev.get("tag") or ev.get("gatilho") or ev.get("som")):
+                errs.append(f"{p}.tag: obrigatorio para {kind}")
+            continue
+
         is_narration = kind in _NARRATION_KINDS or \
             str(ev.get("personagem", "")).strip().lower() in ("narrador", "narrator")
 

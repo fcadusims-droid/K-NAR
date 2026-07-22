@@ -66,13 +66,29 @@ valem dentro da mesma trilha (ninguém interrompe o narrador). Cadeia completa e
 `examples/story_to_audio.py`: história `.txt` → áudio narrado multitrack. Os gatilhos
 de ação já saem prontos como sementes p/ o SFX da Fase 5.
 
-### Fase 5 — SFX pontual (foley) + ambiência + ducking
-* `SfxBackend` (`Protocol`, espelhando `TTSBackend`): `LibrarySfxBackend` (busca em
-  biblioteca de samples etiquetada) primeiro, `NeuralSfxBackend` (texto→áudio tipo
-  AudioGen/Stable Audio) depois.
-* `AmbienceLibrary`: camas ambientais loopáveis por cenário.
-* Ducking sidechain no renderer (`pedalboard.Compressor`): ambiência/música afundam
-  sob a fala. Foley ancorado ao verbo via o forced alignment da Fase 1.
+### Fase 5 — SFX/foley + ambiência + ducking (ÁUDIO REAL primeiro) ✅
+
+O princípio: **áudio real da biblioteca, não geração neural** (mais barato e melhor
+para foley/ambiência). O motor lê a cena, busca o som por tag e o edita para seguir
+o pacing — mixado profissionalmente para um som não estragar o outro.
+
+* `SfxBackend` (`Protocol`, espelhando `TTSBackend`): `LibrarySfxBackend` (busca real
+  em biblioteca de samples etiquetada por tag) é o baseline; `ProceduralSfxBackend`
+  (síntese determinística, sem arquivos) é o stand-in runnable — como o `FormantTTS`
+  é para a voz; `NeuralSfxBackend` (texto→áudio) fica como reserva distante.
+* `SfxEvent` / `AmbienceEvent`: SFX pontual (duração real medida do sample, ancorado a
+  uma ação) e cama ambiental (loopável, cobre a cena, baixa).
+* **Ducking sidechain** no `_combine_tracks`: ambiência/SFX/música afundam sob a fala
+  (envelope da trilha de voz) e voltam quando ela pára. É a mixagem profissional que
+  impede a cacofonia.
+* **Narrador OPCIONAL** (modo radiodrama): o Screenwriter classifica cada frase em
+  diálogo / narração falada / **deixa de som** / ambiência. Descrição sensorial
+  ("passos numa poça d'água") vira SFX, NÃO é lida pelo narrador. Com `narrator=False`,
+  a história é contada só por vozes + sons.
+* **Diálogo reativo ao som**: um SFX é um evento com duração real, então a fala pode
+  ser ancorada a ele ("entra após o tiro", "grita durante a explosão") — a mesma tese
+  de duas passagens (intenção relativa → ms reais). A *reação* é feita no render
+  offline (soa reativo ao ouvinte); streaming ao vivo fica fora de escopo.
 * **Aqui o motor vira o que a visão pede**: história em texto → audiobook com sons.
 
 ### Fase 6 — Polimento e escala
