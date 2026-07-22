@@ -46,7 +46,17 @@ class Orquestrador:
 
         for ev in scene.events:
             clip = clips[ev.id]
-            start_ms = self._resolve_start(ev, prev, cursor_ms)
+            cur_track = getattr(getattr(ev, "track", None), "value", "dialogo")
+
+            # Interrupção/sobreposição só valem DENTRO da mesma trilha: personagem
+            # atropela personagem, mas ninguém interrompe o narrador (nem a narração
+            # atropela o diálogo). Cruzou de trilha -> degrada p/ sequencial.
+            etype = ev.entry.type
+            if prev is not None and prev.track != cur_track and \
+                    etype in (EntryType.INTERRUPTION, EntryType.OVERLAP):
+                etype = EntryType.SEQUENTIAL
+
+            start_ms = self._resolve_start(etype, ev.entry.aggressiveness, prev, cursor_ms)
 
             placement = Placement(
                 event_id=ev.id,
@@ -55,11 +65,11 @@ class Orquestrador:
                 duration_ms=clip.duration_ms,
                 pan=ev.pan,
                 text=ev.text,
-                track=getattr(getattr(ev, "track", None), "value", "dialogo"),
+                track=cur_track,
                 # Bordas: micro-fades anti-clique em toda fala.
                 fade_in_ms=self.policy.edge_fade_in_ms,
                 fade_out_ms=self.policy.edge_fade_out_ms,
-                entry_type=ev.entry.type.value,
+                entry_type=etype.value,
                 # Dinâmica: ganho por tensão, coerente com o pitch/rate do TTS.
                 gain_db=self.prosody.resolve(
                     ProsodyPolicy.tension_scalar(ev.voice.tension)
@@ -68,7 +78,7 @@ class Orquestrador:
 
             # Interrupção: esta fala SOBE sobre a cauda da anterior ("swell") e
             # CORTA a anterior no ponto de entrada, com crossfade equal-power + snap.
-            if prev is not None and ev.entry.type == EntryType.INTERRUPTION:
+            if prev is not None and etype == EntryType.INTERRUPTION:
                 placement.fade_in_ms = self.policy.interruption_swell_in_ms
                 placement.crossfade_ms = self.policy.crossfade_ms
                 if start_ms < prev.natural_end_ms:
@@ -77,7 +87,7 @@ class Orquestrador:
                     self._resolve_cut(prev, prev_clip, start_ms)
 
             # Sobreposição: a fala que entra também recebe swell equal-power curto.
-            if prev is not None and ev.entry.type == EntryType.OVERLAP:
+            if prev is not None and etype == EntryType.OVERLAP:
                 placement.crossfade_ms = self.policy.crossfade_ms
 
             placements.append(placement)
@@ -129,25 +139,28 @@ class Orquestrador:
             prev.cut_method = "energia"
 
     # ------------------------------------------------------------------ #
-    def _resolve_start(self, ev, prev: Placement | None, cursor_ms: int) -> int:
-        """Traduz a dinâmica de entrada relativa em um ponto de início absoluto."""
+    def _resolve_start(self, etype: EntryType, aggressiveness: float,
+                       prev: Placement | None, cursor_ms: int) -> int:
+        """Traduz a dinâmica de entrada relativa em um ponto de início absoluto.
+
+        Recebe o `etype` já resolvido (o laço degrada interrupção/sobreposição p/
+        sequencial quando a fala cruza de trilha)."""
         if prev is None:
             return 0
 
-        etype = ev.entry.type
         if etype == EntryType.SEQUENTIAL:
             # cursor_ms já inclui o fim do anterior + a pausa dramática dele.
             return cursor_ms
 
         if etype == EntryType.INTERRUPTION:
             within = self.policy.interruption_start_within_prev(
-                prev.duration_ms, ev.entry.aggressiveness
+                prev.duration_ms, aggressiveness
             )
             return prev.start_ms + within
 
         if etype == EntryType.OVERLAP:
             within = self.policy.overlap_start_within_prev(
-                prev.duration_ms, ev.entry.aggressiveness
+                prev.duration_ms, aggressiveness
             )
             return prev.start_ms + within
 

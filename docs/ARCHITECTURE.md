@@ -255,14 +255,26 @@ Narração e diálogo compartilham o cursor temporal (num audiobook eles se alte
 não se sobrepõem); o `.track` só decide o bus de render/pan/ducking. Ver
 `examples/narrated_scene.py` (narrador→jeff, personagens→faber, EDL em 2 trilhas).
 
+## Camada Screenwriter — PASSAGEM 0 (implementado)
+
+A entrada do motor deixa de ser "falas prontas" e passa a ser a HISTÓRIA em prosa.
+
+| Peça | Papel |
+|---|---|
+| `narrative/screenwriter.py` | `RuleBasedScreenwriter`: mascara as aspas (a pontuação dentro da fala não corta a frase errada), segmenta em narração/diálogo, extrai locutor + **deixa** (verbo de fala) da atribuição, e detecta **gatilhos de ação** (rangeu→`porta_range`, explodiu→`explosao`) como sementes de SFX. Baseline determinístico; um `LlamaScreenwriter` cobriria os casos difíceis reusando o mesmo contrato. |
+| `director/base.py` | consome `elementos` (narração + diálogo) além do formato antigo `falas`; a deixa calibra a tensão (`gritou`→sobe, `sussurrou`→desce); ações passam para a cena como sementes. |
+| `orchestrator` (guard cross-track) | interrupção/sobreposição só valem DENTRO da mesma trilha — ninguém interrompe o narrador; cruzou de trilha → degrada p/ sequencial. |
+
+Cadeia completa (`examples/story_to_audio.py`): `prosa .txt → Screenwriter → Director
+→ Orquestrador → Renderer → áudio narrado multitrack`. As ações detectadas ficam
+prontas p/ virar `SfxEvent` na Fase 5.
+
 ## O que ainda NÃO existe (próximos passos)
 
-1. **PASSAGEM 0 (Screenwriter)**: prosa crua → grafo de cenas (narração/diálogo/ação/
-   ambiência). Fase 4 do `docs/ROADMAP.md`.
-2. **SFX/foley + ambiência + ducking** (`SfxBackend`, `AmbienceLibrary`, sidechain).
+1. **SFX/foley + ambiência + ducking** (`SfxBackend`, `AmbienceLibrary`, sidechain).
    Fase 5 — é onde o motor vira "história em texto → audiobook com sons".
-3. **Crossfade equal-power em `sobreposicao` longa** e calibração do `LlamaDirector`
-   (Fase 6).
+2. **Crossfade equal-power em `sobreposicao` longa** e calibração do `LlamaDirector`
+   (Fase 6). Ver `docs/ROADMAP.md`.
 
 ## Visão: motor de áudio narrativo completo (roadmap)
 

@@ -57,12 +57,14 @@ para ancorar o foley ao verbo exato da ação. Ver `docs/ARCHITECTURE.md`.
   narração + diálogo em trilhas separadas; o renderer mixa por trilha e combina (soma
   hoje, ducking na Fase 5). Demo: `examples/narrated_scene.py`.
 
-### Fase 4 — Camada Screenwriter (PASSAGEM 0)
-`k_nar/narrative/`: prosa crua → grafo de cenas, marcando narração / diálogo / ação
-/ ambiência. É o Director "subindo um nível" (antes recebia falas prontas; agora
-recebe a história). Schema estrito + fallback por regras (a filosofia de nunca
-falhar em silêncio). Entregável: uma história curta → EDL completa com as *cues*
-marcadas (ainda sem áudio de SFX).
+### Fase 4 — Camada Screenwriter (PASSAGEM 0) ✅
+`k_nar/narrative/`: `RuleBasedScreenwriter` segmenta a prosa (aspas → diálogo com
+locutor + deixa; resto → narração; verbos/substantivos de ação → gatilhos de SFX).
+O `Director` foi estendido p/ consumir `elementos` (narração + diálogo) e a deixa
+calibra a tensão. Guard cross-track no Orquestrador: interrupção/sobreposição só
+valem dentro da mesma trilha (ninguém interrompe o narrador). Cadeia completa em
+`examples/story_to_audio.py`: história `.txt` → áudio narrado multitrack. Os gatilhos
+de ação já saem prontos como sementes p/ o SFX da Fase 5.
 
 ### Fase 5 — SFX pontual (foley) + ambiência + ducking
 * `SfxBackend` (`Protocol`, espelhando `TTSBackend`): `LibrarySfxBackend` (busca em

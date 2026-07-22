@@ -76,6 +76,13 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - `check_timeline`/`check_mix` — QA automatizado: overlaps que engolem, cortes
   agressivos, clipping. Rodam no CI a cada push/PR.
 
+**Narração e áudio narrativo (`k_nar/models.py`, `k_nar/narrative/`):**
+
+- `Track` + `NarrationEvent` — a linha de tempo vira multitrack (diálogo/narração/…);
+  o renderer mixa por trilha (base do ducking).
+- `RuleBasedScreenwriter` (PASSAGEM 0) — prosa → narração + diálogo (com locutor) +
+  gatilhos de ação (sementes de SFX). Cadeia história→áudio em `examples/story_to_audio.py`.
+
 Próxima grande evolução: virar um **motor de áudio narrativo completo** (narração +
 SFX/foley + ambiência a partir de prosa). Roadmap em [`docs/ROADMAP.md`](docs/ROADMAP.md);
 detalhes das fases em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -104,6 +111,13 @@ python -m examples.render_neural roteiro.json --llm   # Director LLM (few-shot)
 # voz DISTINTA por personagem (faber+jeff) + relatorio de QA acustico
 scripts/download_piper.sh jeff                    # segunda voz real
 python -m examples.multivoice_qa
+
+# HISTORIA em prosa -> audiobook narrado (Screenwriter -> Director -> audio)
+python -m examples.story_to_audio                 # usa examples/historia_exemplo.txt
+python -m examples.story_to_audio minha_historia.txt
+
+# cena narrada (narrador + personagens em trilhas separadas)
+python -m examples.narrated_scene
 
 # provas: trim + crossfade | expressividade (mesma frase em 4 tensoes)
 python -m examples.proof_dsp

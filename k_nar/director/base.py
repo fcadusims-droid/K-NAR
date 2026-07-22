@@ -35,31 +35,29 @@ class BaseDirector:
     _RATE_BY_TENSION = {"baixa": 0.9, "media": 1.0, "alta": 1.08, "extrema": 1.18}
 
     def direct(self, script: dict[str, Any]) -> dict[str, Any]:
-        falas = script.get("falas", script.get("eventos", []))
-        if not falas:
-            raise ValueError("script sem 'falas'")
+        # PASSAGEM 0 (Screenwriter) entrega `elementos` (narração + diálogo); o formato
+        # antigo entrega `falas` (só diálogo). Aceitamos os dois — retrocompatível.
+        elementos = script.get("elementos")
+        itens = elementos if elementos is not None else \
+            script.get("falas", script.get("eventos", []))
+        if not itens:
+            raise ValueError("script sem 'elementos' nem 'falas'")
 
         pans: dict[str, int] = {}
         eventos = []
         prev_text = None
-        for i, fala in enumerate(falas):
-            personagem = str(fala.get("personagem", fala.get("character", "?")))
-            texto = str(fala.get("texto", fala.get("text", ""))).strip()
-            if personagem not in pans:
-                pans[personagem] = _PAN_SLOTS[len(pans) % len(_PAN_SLOTS)]
+        for i, item in enumerate(itens):
+            tipo_ev = str(item.get("tipo", "fala")).strip().lower()
+            texto = str(item.get("texto", item.get("text", ""))).strip()
 
-            d = self._decide(personagem, texto, i, prev_text)
-            tensao = d["tensao"]
-            eventos.append({
-                "id": fala.get("id", f"fala_{i+1}"),
-                "personagem": personagem,
-                "texto": texto,
-                "voz": {"tensao": tensao,
-                        "velocidade": round(self._RATE_BY_TENSION.get(tensao, 1.0), 2)},
-                "entrada": {"tipo": d["tipo"], "agressividade": round(d["agressividade"], 2)},
-                "saida": {"pausa": d["pausa"]},
-                "palco": {"estereo": pans[personagem]},
-            })
+            if tipo_ev in ("narracao", "narrador"):
+                eventos.append(self._narration_event(item, i, texto))
+            else:
+                personagem = str(item.get("personagem", item.get("character", "?")))
+                if personagem not in pans:
+                    pans[personagem] = _PAN_SLOTS[len(pans) % len(_PAN_SLOTS)]
+                eventos.append(self._speech_event(item, i, personagem, texto,
+                                                  prev_text, pans[personagem]))
             prev_text = texto
 
         scene = {
@@ -67,12 +65,48 @@ class BaseDirector:
             "ambientacao": str(script.get("ambientacao", "seco")),
             "eventos": eventos,
         }
+        # gatilhos de ação (sementes de SFX) seguem para a Fase 5; o schema os ignora.
+        if script.get("acoes"):
+            scene["acoes"] = script["acoes"]
         validate_scene(scene)  # portão estrito: nada sai fora do contrato
         return scene
 
     # ------------------------------------------------------------------ #
+    def _speech_event(self, item, index, personagem, texto, prev_text, pan) -> dict[str, Any]:
+        d = self._decide(personagem, texto, index, prev_text, cue=item.get("deixa"))
+        tensao = d["tensao"]
+        return {
+            "id": item.get("id", f"fala_{index+1}"),
+            "personagem": personagem,
+            "texto": texto,
+            "voz": {"tensao": tensao,
+                    "velocidade": round(self._RATE_BY_TENSION.get(tensao, 1.0), 2)},
+            "entrada": {"tipo": d["tipo"], "agressividade": round(d["agressividade"], 2)},
+            "saida": {"pausa": d["pausa"]},
+            "palco": {"estereo": pan},
+        }
+
+    def _narration_event(self, item, index, texto) -> dict[str, Any]:
+        """Narração: mesma leitura de tensão, mas sempre SEQUENCIAL (o narrador não é
+        interrompido) e centralizada. A voz do narrador é escolhida no TTS (perfil)."""
+        d = self._decide("Narrador", texto, index, None, cue=item.get("deixa"))
+        tensao = d["tensao"]
+        return {
+            "id": item.get("id", f"narr_{index+1}"),
+            "tipo_evento": "narracao",
+            "personagem": "Narrador",
+            "texto": texto,
+            "voz": {"tensao": tensao,
+                    "velocidade": round(self._RATE_BY_TENSION.get(tensao, 1.0), 2)},
+            "entrada": {"tipo": "sequencial", "agressividade": 0.0},
+            "saida": {"pausa": d["pausa"]},
+            "palco": {"estereo": 0},
+        }
+
+    # ------------------------------------------------------------------ #
     def _decide(self, personagem: str, texto: str, index: int,
-                prev_text: str | None) -> dict[str, Any]:
-        """Devolve {tensao, tipo, agressividade, pausa} para uma fala.
+                prev_text: str | None, cue: str | None = None) -> dict[str, Any]:
+        """Devolve {tensao, tipo, agressividade, pausa} para uma fala/narração.
+        `cue` é a "deixa" (verbo de fala: gritou/sussurrou) que o Screenwriter extraiu.
         Implementado pelas subclasses (regras ou LLM)."""
         raise NotImplementedError

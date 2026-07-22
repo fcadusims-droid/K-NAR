@@ -66,6 +66,37 @@ class TestMultitrackOrchestration(unittest.TestCase):
         d1 = next(p for p in tl.placements if p.event_id == "d1")
         self.assertGreaterEqual(d1.start_ms, n1.natural_end_ms)
 
+    def test_dialogue_does_not_interrupt_narration_cross_track(self):
+        # uma fala marcada como interrupção logo após a NARRAÇÃO não corta o narrador:
+        # interrupção só vale dentro da mesma trilha.
+        scene = Scene.from_dict({
+            "cena_id": "c", "ambientacao": "seco",
+            "eventos": [
+                {"id": "n1", "tipo_evento": "narracao", "texto": "A porta abriu devagar."},
+                {"id": "d1", "personagem": "Ana", "texto": "Pare!",
+                 "entrada": {"tipo": "interrupcao", "agressividade": 0.4}},
+            ],
+        })
+        tl = Orquestrador(MockTTSBackend()).render_scene(scene)
+        n1 = next(p for p in tl.placements if p.event_id == "n1")
+        d1 = next(p for p in tl.placements if p.event_id == "d1")
+        self.assertIsNone(n1.hard_cut_ms)                 # narrador NÃO foi cortado
+        self.assertEqual(d1.entry_type, "sequencial")      # degradou p/ sequencial
+        self.assertGreaterEqual(d1.start_ms, n1.natural_end_ms)
+
+    def test_dialogue_still_interrupts_dialogue_same_track(self):
+        scene = Scene.from_dict({
+            "cena_id": "c", "ambientacao": "seco",
+            "eventos": [
+                {"id": "d1", "personagem": "Ana", "texto": "Eu estava dizendo que"},
+                {"id": "d2", "personagem": "Bruno", "texto": "Chega!",
+                 "entrada": {"tipo": "interrupcao", "agressividade": 0.4}},
+            ],
+        })
+        tl = Orquestrador(MockTTSBackend()).render_scene(scene)
+        d1 = next(p for p in tl.placements if p.event_id == "d1")
+        self.assertIsNotNone(d1.hard_cut_ms)              # mesma trilha: corte acontece
+
     def test_to_dict_includes_track(self):
         scene = Scene.from_dict({
             "cena_id": "c", "ambientacao": "seco",
