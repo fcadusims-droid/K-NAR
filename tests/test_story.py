@@ -42,6 +42,13 @@ class TestFrontmatter(unittest.TestCase):
         self.assertEqual(s.lang, "es")
         self.assertEqual(s.title, "T")
 
+    def test_crlf_frontmatter(self):
+        # arquivos de Windows/web usam \r\n; o front-matter deve casar mesmo assim
+        s = parse_story("---\r\nidioma: en\r\nnarrador: nao\r\n---\r\nHello there.")
+        self.assertEqual(s.lang, "en")
+        self.assertFalse(s.narrator)
+        self.assertEqual(s.prose, "Hello there.")
+
     def test_scene_id_slug(self):
         self.assertEqual(Story(title="A Ponte de Comando!", prose="x").scene_id,
                          "a_ponte_de_comando")

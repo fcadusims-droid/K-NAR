@@ -50,7 +50,7 @@ def _exp_env(n: int, decay: float) -> np.ndarray:
     return np.exp(-decay * t).astype(np.float32)
 
 
-def _norm(x: np.ndarray, peak: float = 0.9) -> np.ndarray:
+def _peaknorm(x: np.ndarray, peak: float = 0.9) -> np.ndarray:
     m = float(np.max(np.abs(x))) or 1.0
     return (x / m * peak).astype(np.float32)
 
@@ -62,19 +62,19 @@ def _gun(sr, dur, rng):
     n = int(sr * dur)
     burst = _noise(n, rng) * _exp_env(n, 22.0)
     thump = np.sin(2 * np.pi * 70 * np.arange(n) / sr) * _exp_env(n, 30.0)
-    return _norm(burst + 0.6 * thump)
+    return _peaknorm(burst + 0.6 * thump)
 
 
 def _explosion(sr, dur, rng):
     n = int(sr * dur)
     body = _lowpass(_noise(n, rng), 0.6) * _exp_env(n, 6.0)
     rumble = np.sin(2 * np.pi * 45 * np.arange(n) / sr) * _exp_env(n, 4.0)
-    return _norm(body + 0.8 * rumble)
+    return _peaknorm(body + 0.8 * rumble)
 
 
 def _impact(sr, dur, rng):
     n = int(sr * dur)
-    return _norm(_lowpass(_noise(n, rng), 0.4) * _exp_env(n, 26.0))
+    return _peaknorm(_lowpass(_noise(n, rng), 0.4) * _exp_env(n, 26.0))
 
 
 def _glass(sr, dur, rng):
@@ -82,13 +82,13 @@ def _glass(sr, dur, rng):
     shards = _highpass(_noise(n, rng), 0.2) * _exp_env(n, 10.0)
     ring = sum(np.sin(2 * np.pi * f * np.arange(n) / sr) * _exp_env(n, 14.0)
                for f in (2200, 3300, 5100))
-    return _norm(shards + 0.3 * ring)
+    return _peaknorm(shards + 0.3 * ring)
 
 
 def _thunder(sr, dur, rng):
     n = int(sr * dur)
     env = np.minimum(np.linspace(0, 3, n), _exp_env(n, 3.0) * 3)
-    return _norm(_lowpass(_noise(n, rng), 0.72) * env)
+    return _peaknorm(_lowpass(_noise(n, rng), 0.72) * env)
 
 
 def _footsteps(sr, dur, rng, splash=False):
@@ -105,7 +105,7 @@ def _footsteps(sr, dur, rng, splash=False):
         seg = seg * _exp_env(ln, 8.0 if splash else 20.0)
         end = min(n, start + ln)
         out[start:end] += seg[: end - start]
-    return _norm(out)
+    return _peaknorm(out)
 
 
 def _door_creak(sr, dur, rng):
@@ -115,33 +115,33 @@ def _door_creak(sr, dur, rng):
     f = 180 + 120 * (t / dur)
     creak = np.sin(2 * np.pi * f * t) * (1 + 0.5 * np.sin(2 * np.pi * 11 * t))
     env = np.sin(np.pi * t / dur) ** 0.5
-    return _norm(creak.astype(np.float32) * env + 0.1 * _noise(n, rng) * env)
+    return _peaknorm(creak.astype(np.float32) * env + 0.1 * _noise(n, rng) * env)
 
 
 def _wind(sr, dur, rng):
     n = int(sr * dur)
     base = _lowpass(_noise(n, rng), 0.9)
     gust = 0.5 + 0.5 * np.sin(2 * np.pi * 0.2 * np.arange(n) / sr)
-    return _norm(base * gust.astype(np.float32))
+    return _peaknorm(base * gust.astype(np.float32))
 
 
 def _rain(sr, dur, rng):
     n = int(sr * dur)
-    return _norm(_highpass(_noise(n, rng), 0.5) * 0.8)
+    return _peaknorm(_highpass(_noise(n, rng), 0.5) * 0.8)
 
 
 def _engine(sr, dur, rng):
     n = int(sr * dur)
     t = np.arange(n) / sr
     buzz = sum(np.sin(2 * np.pi * f * t) for f in (60, 120, 180)).astype(np.float32)
-    return _norm(buzz + 0.3 * _lowpass(_noise(n, rng), 0.7))
+    return _peaknorm(buzz + 0.3 * _lowpass(_noise(n, rng), 0.7))
 
 
 def _siren(sr, dur, rng):
     n = int(sr * dur)
     t = np.arange(n) / sr
     f = 650 + 250 * np.sin(2 * np.pi * 0.5 * t)
-    return _norm(np.sin(2 * np.pi * f * t).astype(np.float32))
+    return _peaknorm(np.sin(2 * np.pi * f * t).astype(np.float32))
 
 
 def _forest_night(sr, dur, rng):
@@ -151,12 +151,12 @@ def _forest_night(sr, dur, rng):
     t = np.arange(n) / sr
     crickets = 0.15 * (np.sin(2 * np.pi * 4200 * t) *
                        (0.5 + 0.5 * np.sin(2 * np.pi * 18 * t))).astype(np.float32)
-    return _norm(bed + crickets)
+    return _peaknorm(bed + crickets)
 
 
 def _crowd(sr, dur, rng):
     n = int(sr * dur)
-    return _norm(_lowpass(_noise(n, rng), 0.8) *
+    return _peaknorm(_lowpass(_noise(n, rng), 0.8) *
                  (0.6 + 0.4 * np.sin(2 * np.pi * 0.7 * np.arange(n) / sr)).astype(np.float32))
 
 
@@ -190,7 +190,7 @@ class ProceduralSfxBackend:
         gen_dur = _SFX.get(tag) or _AMBIENCE.get(tag)
         if gen_dur is None:
             # tag desconhecido: um blip curto e neutro (auditável, nunca silêncio mudo)
-            gen_dur = ((lambda sr, d, r: _norm(_noise(int(sr * d), r) * _exp_env(int(sr * d), 12.0))), 0.25)
+            gen_dur = ((lambda sr, d, r: _peaknorm(_noise(int(sr * d), r) * _exp_env(int(sr * d), 12.0))), 0.25)
         gen, dur = gen_dur
         audio = gen(self.sr, dur, _rng(tag))
         return RenderedClip(

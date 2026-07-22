@@ -28,6 +28,8 @@ class RenderResult:
     timeline: object        # Timeline
     issues: list            # list[QAIssue]
     voice_kind: str         # "piper" | "formante"
+    script: dict            # roteiro estruturado do Screenwriter (elementos/acoes)
+    scene: object           # Scene montada pelo Director
 
     def write(self, path: str) -> str:
         from k_nar.render.renderer import TimelineRenderer
@@ -81,7 +83,8 @@ def render_story(story: Story, *, models_dir: str = "models/piper",
     script = RuleBasedScreenwriter().write(
         story.prose, scene_id=story.scene_id, ambiance=story.ambiance,
         narrator=story.narrator, lang=story.lang)
-    scene = Scene.from_dict(RuleBasedDirector().direct(script))
+    scene_dict = RuleBasedDirector().direct(script)
+    scene = Scene.from_dict(scene_dict)
 
     # PASSAGENS 2-3
     prosody = ProsodyPolicy()
@@ -89,10 +92,16 @@ def render_story(story: Story, *, models_dir: str = "models/piper",
     voice, sr, kind = _voice_backend(lang_profile, prosody, models_dir)
     sfxb = _sfx_backend(sr, sounds_dir)
 
-    clips = {}
-    for ev in scene.events:
-        track = getattr(getattr(ev, "track", None), "value", "dialogo")
-        clips[ev.id] = sfxb.render(ev) if track in _SOUND_TRACKS else voice.synthesize(ev)
+    def _track(ev):
+        return getattr(getattr(ev, "track", None), "value", "dialogo")
+
+    speech = [ev for ev in scene.events if _track(ev) not in _SOUND_TRACKS]
+    sound = [ev for ev in scene.events if _track(ev) in _SOUND_TRACKS]
+
+    # fala em paralelo (a passagem 2 lenta não bloqueia); som é barato, serial.
+    from k_nar.tts.batch import synthesize_all
+    clips = synthesize_all(voice, speech, workers=4)
+    clips.update({ev.id: sfxb.render(ev) for ev in sound})
     timeline = Orquestrador(voice, policy, prosody=prosody).render_scene(scene, clips=clips)
 
     # PASSAGEM 4 (render + QA)
@@ -100,4 +109,5 @@ def render_story(story: Story, *, models_dir: str = "models/piper",
     renderer = TimelineRenderer(sr=sr, policy=policy)
     stereo = renderer.render(timeline, samples, mode=mode)
     issues = check_timeline(timeline, policy) + check_mix(dsp.clipping_stats(stereo))
-    return RenderResult(stereo=stereo, sr=sr, timeline=timeline, issues=issues, voice_kind=kind)
+    return RenderResult(stereo=stereo, sr=sr, timeline=timeline, issues=issues,
+                        voice_kind=kind, script=script, scene=scene)

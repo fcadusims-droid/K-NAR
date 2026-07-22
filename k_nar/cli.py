@@ -57,7 +57,13 @@ def main(argv: list[str] | None = None) -> int:
 
     out = Path(args.output) if args.output else src.with_suffix(".wav")
 
-    res = render_story(story, models_dir=args.models, sounds_dir=args.sons)
+    try:
+        res = render_story(story, models_dir=args.models, sounds_dir=args.sons)
+    except ValueError as e:
+        # ex.: história sem nenhuma fala/narração/som após a segmentação
+        print(f"erro: não consegui montar a cena ({e}). A história tem conteúdo?",
+              file=sys.stderr)
+        return 1
     res.write(str(out))
 
     if not args.quiet:

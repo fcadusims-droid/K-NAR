@@ -99,6 +99,9 @@ def strip_markdown(text: str) -> str:
 def parse_story(text: str, *, default_lang: str = "pt", default_narrator: bool = True,
                 title: str = "") -> Story:
     """Constrói uma `Story` a partir do conteúdo bruto (front-matter + Markdown)."""
+    # normaliza quebras de linha (arquivos de Windows/web usam \r\n): senão o
+    # front-matter (fechado por "\n---\n") não casa e vira prosa.
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     meta, body = _parse_frontmatter(text)
     lang = meta.get("idioma", meta.get("language", meta.get("lang", default_lang)))
     narrator = _parse_bool(meta.get("narrador", meta.get("narrator", "")),
