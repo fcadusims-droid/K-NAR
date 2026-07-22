@@ -127,6 +127,9 @@ class Placement:
     duration_ms: int
     pan: int
     text: str
+    # Trilha (bus) onde este placement é mixado: "dialogo"/"narracao"/"sfx"/... O
+    # renderer mixa por trilha — base do ducking. Default diálogo (retrocompat).
+    track: str = "dialogo"
     # Se esta fala foi interrompida, o renderer deve cortar/duckar aqui (ms absolutos).
     # None = toca inteira. É a diferença concreta entre interrupção e sobreposição.
     hard_cut_ms: int | None = None
@@ -194,6 +197,7 @@ class Timeline:
                 {
                     "id": p.event_id,
                     "personagem": p.character,
+                    "faixa": p.track,
                     "inicio_ms": p.start_ms,
                     "duracao_ms": p.duration_ms,
                     "corte_ms": p.hard_cut_ms,

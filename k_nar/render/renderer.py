@@ -43,23 +43,50 @@ class TimelineRenderer:
 
     def render(self, timeline: Timeline, clips: dict[str, np.ndarray],
                mode: str = "full") -> np.ndarray:
-        """Devolve a mixagem estéreo (2, N) float32."""
+        """Devolve a mixagem estéreo (2, N) float32.
+
+        Multitrack: cada trilha (diálogo/narração/...) é mixada no seu próprio bed e
+        os beds são combinados por `_combine_tracks`. Hoje a combinação é soma simples
+        (idêntico ao mono-bus); é o ponto onde o ducking entra nas fases seguintes.
+        """
         ir = make_impulse_response(timeline.ambiance, self.sr)
         tail = len(ir) if mode == "full" and timeline.ambiance != "seco" else 0
         total = self._ms(timeline.total_duration_ms) + tail + self.sr // 2
-        bed = np.zeros((2, total), dtype=np.float32)
 
-        for p in timeline.placements:
-            mono = clips.get(p.event_id)
-            if mono is None or len(mono) == 0:
-                continue
-            stereo = self._place(p, np.asarray(mono, dtype=np.float32), mode)
-            self._overlay(bed, stereo, self._ms(p.start_ms))
+        beds = self._render_tracks(timeline, clips, mode, total)
+        bed = self._combine_tracks(beds, total)
 
         if mode == "full" and timeline.ambiance != "seco":
             bed = dsp.convolution_reverb(bed, ir, wet=self.reverb_wet)
 
         return self._master(bed, mode)
+
+    # ------------------------------------------------------------------ #
+    def _render_tracks(self, timeline: Timeline, clips: dict[str, np.ndarray],
+                       mode: str, total: int) -> dict[str, np.ndarray]:
+        """Um bed estéreo (2, total) por trilha presente na EDL."""
+        beds: dict[str, np.ndarray] = {}
+        for p in timeline.placements:
+            mono = clips.get(p.event_id)
+            if mono is None or len(mono) == 0:
+                continue
+            stereo = self._place(p, np.asarray(mono, dtype=np.float32), mode)
+            bed = beds.get(p.track)
+            if bed is None:
+                bed = np.zeros((2, total), dtype=np.float32)
+                beds[p.track] = bed
+            self._overlay(bed, stereo, self._ms(p.start_ms))
+        return beds
+
+    def _combine_tracks(self, beds: dict[str, np.ndarray], total: int) -> np.ndarray:
+        """Combina os beds de trilha num só. Fase 3: soma. Fase 5: ducking sidechain
+        (ambiência/música afundam sob a fala) entra aqui, sem tocar no resto."""
+        if not beds:
+            return np.zeros((2, total), dtype=np.float32)
+        mix = np.zeros((2, total), dtype=np.float32)
+        for bed in beds.values():
+            mix += bed
+        return mix
 
     # ------------------------------------------------------------------ #
     def _place(self, p: Placement, mono: np.ndarray, mode: str) -> np.ndarray:

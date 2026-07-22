@@ -1,0 +1,12 @@
+{
+  "cena_id": "porta_da_nave",
+  "ambientacao": "cockpit_metalico_eco",
+  "eventos": [
+    { "id": "n1", "tipo_evento": "narracao", "texto": "A porta blindada rangeu ao abrir, e o eco metalico correu pelo corredor vazio." },
+    { "id": "d1", "personagem": "Alien A", "texto": "Tem alguem ai? Eu sei que voce me ouve." },
+    { "id": "n2", "tipo_evento": "narracao", "texto": "Por um instante, so o zumbido dos motores respondeu." },
+    { "id": "d2", "personagem": "Alien B", "texto": "Eu estive aqui o tempo todo, comandante.", "voz": { "tensao": "media" } },
+    { "id": "d3", "personagem": "Alien A", "texto": "Entao por que se escondeu?", "voz": { "tensao": "alta" }, "entrada": { "tipo": "interrupcao", "agressividade": 0.3 } },
+    { "id": "n3", "tipo_evento": "narracao", "texto": "E, com essa pergunta, a verdadeira batalha comecou." }
+  ]
+}

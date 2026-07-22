@@ -49,12 +49,13 @@ para ancorar o foley ao verbo exato da ação. Ver `docs/ARCHITECTURE.md`.
   que engolem palavras / cortes agressivos / cruzamentos inesperados (`check_timeline`).
   CI roda a suíte a cada push/PR. Rede de segurança ANTES de multiplicar as camadas.
 
-### Fase 3 — Generalizar `Event` + Timeline multitrack
-* `SpeechEvent` → união `Event` com um campo discriminador; adicionar
-  `NarrationEvent` (fala do narrador, reusa 100% do TTS).
-* Timeline ganha buses paralelos; o renderer mixa N trilhas. Ainda sem SFX — só
-  provar que a EDL suporta narração + diálogo em trilhas separadas. **Baixo risco,
-  alta alavancagem**: é o pré-requisito estrutural de tudo que vem depois.
+### Fase 3 — Generalizar `Event` + Timeline multitrack ✅
+* `SpeechEvent` ganha discriminador `Track`; `NarrationEvent` (fala do narrador,
+  reusa 100% do TTS) entra na trilha de narração; `build_event` faz o dispatch a
+  partir do JSON (retrocompatível).
+* `Placement.track` + `renderer._render_tracks`/`_combine_tracks`: a EDL suporta
+  narração + diálogo em trilhas separadas; o renderer mixa por trilha e combina (soma
+  hoje, ducking na Fase 5). Demo: `examples/narrated_scene.py`.
 
 ### Fase 4 — Camada Screenwriter (PASSAGEM 0)
 `k_nar/narrative/`: prosa crua → grafo de cenas, marcando narração / diálogo / ação

@@ -55,6 +55,7 @@ class Orquestrador:
                 duration_ms=clip.duration_ms,
                 pan=ev.pan,
                 text=ev.text,
+                track=getattr(getattr(ev, "track", None), "value", "dialogo"),
                 # Bordas: micro-fades anti-clique em toda fala.
                 fade_in_ms=self.policy.edge_fade_in_ms,
                 fade_out_ms=self.policy.edge_fade_out_ms,

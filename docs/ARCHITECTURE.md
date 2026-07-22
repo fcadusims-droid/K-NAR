@@ -236,14 +236,33 @@ distintos, timbres reais) e imprime o relatório de QA. Vozes por `scripts/downl
 A CI (`.github/workflows/tests.yml`) roda a suíte a cada push/PR (usa mock/formante,
 sem baixar modelos) — o QA da EDL e do mix vira portão automatizado.
 
+## Generalização para áudio narrativo: `Event` + Timeline multitrack (implementado)
+
+A virada de "motor de diálogo" para "motor de áudio narrativo". O modelo de evento
+deixa de ser só `SpeechEvent`: ganha um **discriminador de trilha** (`Track`) e um
+segundo tipo, `NarrationEvent` (a voz do narrador — mesmo TTS, outra trilha).
+
+| Peça | Papel |
+|---|---|
+| `models.Track` | enum de bus: `dialogo`/`narracao`/`sfx`/`ambiencia`/`musica`. O discriminador que separa os eventos no mix. |
+| `models.NarrationEvent` | fala do narrador; mesma interface de duck-typing que `SpeechEvent` (o Orquestrador trata os dois no mesmo laço), só o `.track` difere. Entra sempre sequencial. |
+| `models.build_event` | dispatcher: lê `tipo_evento` (ou `personagem: "Narrador"`) e constrói o evento certo. Retrocompatível: sem discriminador = diálogo. |
+| `Placement.track` / `Timeline.to_dict` | a EDL carrega a trilha de cada evento. |
+| `renderer._render_tracks`/`_combine_tracks` | mixa um bed por trilha e os combina. Hoje soma simples (idêntico ao mono-bus); é o ponto onde o **ducking** entra na Fase 5, sem tocar no resto. |
+| `schema` | valida `tipo_evento` e dispensa `personagem` na narração (mantém estrito no diálogo). |
+
+Narração e diálogo compartilham o cursor temporal (num audiobook eles se alternam,
+não se sobrepõem); o `.track` só decide o bus de render/pan/ducking. Ver
+`examples/narrated_scene.py` (narrador→jeff, personagens→faber, EDL em 2 trilhas).
+
 ## O que ainda NÃO existe (próximos passos)
 
-1. **Crossfade equal-power em `sobreposicao` longa** (hoje o equal-power cobre a
-   costura de interrupção; na fala simultânea prolongada as vozes dependem do limiter).
-2. Calibrar mais o `LlamaDirector`: o few-shot quebrou a saturação, mas o 1.5B ainda
-   subusa "baixa". Mais exemplos ou um modelo maior sharpeariam a escala.
-3. As **fases narrativas** (3–6): união `Event`, Timeline multitrack, Screenwriter
-   (PASSAGEM 0), SFX/foley + ambiência + ducking. Ver `docs/ROADMAP.md`.
+1. **PASSAGEM 0 (Screenwriter)**: prosa crua → grafo de cenas (narração/diálogo/ação/
+   ambiência). Fase 4 do `docs/ROADMAP.md`.
+2. **SFX/foley + ambiência + ducking** (`SfxBackend`, `AmbienceLibrary`, sidechain).
+   Fase 5 — é onde o motor vira "história em texto → audiobook com sons".
+3. **Crossfade equal-power em `sobreposicao` longa** e calibração do `LlamaDirector`
+   (Fase 6).
 
 ## Visão: motor de áudio narrativo completo (roadmap)
 

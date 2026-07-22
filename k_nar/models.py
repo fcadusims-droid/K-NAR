@@ -32,6 +32,19 @@ class DramaticPause(str, Enum):
     LONG = "longa"
 
 
+class Track(str, Enum):
+    """A TRILHA (bus) onde um evento é mixado. É o discriminador que generaliza a
+    linha de tempo de "só diálogo" para áudio narrativo: diálogo e narração são fala
+    (mesmo TTS) em buses distintos; SFX/ambiência/música entram nas fases seguintes.
+    O renderer mixa por trilha — pré-requisito do ducking (ambiência afunda sob a fala)."""
+
+    DIALOGUE = "dialogo"
+    NARRATION = "narracao"
+    SFX = "sfx"
+    AMBIENCE = "ambiencia"
+    MUSIC = "musica"
+
+
 def _as_float(value: Any, default: float) -> float:
     try:
         return float(value)
@@ -104,8 +117,8 @@ class ExitDynamics:
 
 @dataclass
 class SpeechEvent:
-    """Um evento de fala. É a unidade que o TTS sintetiza e que o Orquestrador
-    posiciona na linha de tempo."""
+    """Um evento de fala (diálogo). É a unidade que o TTS sintetiza e que o
+    Orquestrador posiciona na linha de tempo."""
 
     id: str
     character: str
@@ -114,6 +127,7 @@ class SpeechEvent:
     entry: EntryDynamics = field(default_factory=EntryDynamics)
     exit: ExitDynamics = field(default_factory=ExitDynamics)
     pan: int = 0  # posição no palco estéreo (-100 esquerda .. +100 direita); usado pelo DSP depois
+    track: Track = Track.DIALOGUE  # bus de mixagem (discriminador do evento)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "SpeechEvent":
@@ -131,12 +145,65 @@ class SpeechEvent:
 
 
 @dataclass
+class NarrationEvent:
+    """A voz do NARRADOR. É fala (mesmo TTS que o diálogo), mas noutra trilha: entra
+    sempre em sequência (o narrador não é interrompido), centralizada por padrão.
+
+    Expõe a MESMA interface de duck-typing que `SpeechEvent` (`.id/.character/.text/
+    .voice/.entry/.exit/.pan`) para o Orquestrador tratar os dois no mesmo laço; só o
+    `.track` os separa no mix."""
+
+    id: str
+    text: str
+    voice: VoiceParams = field(default_factory=VoiceParams)
+    exit: ExitDynamics = field(default_factory=ExitDynamics)
+    character: str = "Narrador"
+    pan: int = 0
+    entry: EntryDynamics = field(default_factory=EntryDynamics)  # sempre sequencial
+    track: Track = Track.NARRATION
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "NarrationEvent":
+        palco = d.get("palco", {}) or {}
+        pan = int(_as_float(palco.get("estereo", palco.get("pan", 0)), 0.0))
+        return cls(
+            id=str(d["id"]),
+            text=str(d.get("texto", d.get("text", ""))),
+            character=str(d.get("personagem", d.get("character", "Narrador"))),
+            voice=VoiceParams.from_dict(d.get("voz", d.get("parametros_voz"))),
+            exit=ExitDynamics.from_dict(d.get("saida", d.get("dinamica_de_saida"))),
+            pan=pan,
+        )
+
+
+# Evento de linha de tempo (união). Por ora fala/narração; SFX/ambiência nas fases 5+.
+Event = SpeechEvent  # alias de tipo pragmático (duck-typing); ver NarrationEvent
+
+# Dispatcher: lê o discriminador do JSON e constrói o evento certo.
+_EVENT_BUILDERS = {
+    "fala": SpeechEvent.from_dict,
+    "dialogo": SpeechEvent.from_dict,
+    "narracao": NarrationEvent.from_dict,
+    "narrador": NarrationEvent.from_dict,
+}
+
+
+def build_event(d: dict[str, Any]):
+    """Constrói SpeechEvent ou NarrationEvent conforme `tipo_evento` (default: fala).
+    Também trata `personagem: "Narrador"` como narração, por ergonomia."""
+    kind = str(d.get("tipo_evento", d.get("tipo", d.get("kind", "")))).strip().lower()
+    if not kind and str(d.get("personagem", d.get("character", ""))).strip().lower() in ("narrador", "narrator"):
+        kind = "narracao"
+    return _EVENT_BUILDERS.get(kind, SpeechEvent.from_dict)(d)
+
+
+@dataclass
 class Scene:
     """Uma cena: identidade acústica (`ambiance` -> Impulse Response no DSP) + eventos."""
 
     id: str
     ambiance: str
-    events: list[SpeechEvent] = field(default_factory=list)
+    events: list[Any] = field(default_factory=list)  # SpeechEvent | NarrationEvent
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "Scene":
@@ -144,5 +211,5 @@ class Scene:
         return cls(
             id=str(d.get("cena_id", d.get("id", "cena"))),
             ambiance=str(d.get("ambientacao", d.get("ambiance", "seco"))),
-            events=[SpeechEvent.from_dict(e) for e in eventos],
+            events=[build_event(e) for e in eventos],
         )
