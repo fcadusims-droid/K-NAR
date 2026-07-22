@@ -62,8 +62,16 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
   corte ao vale de energia, **crossfade equal-power** na interrupção, panning e **bus
   de reverb convolutivo** único por cena. Modos `naive`/`dry`/`full` para A/B.
 
-Ainda **não** existe: forced alignment real e voz distinta por personagem.
-Ver "próximos passos" em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+**Forced alignment (`k_nar/align.py`):**
+
+- `Alignment` — fronteiras fonema→amostra do próprio Piper/VITS (`include_alignments`,
+  requer `onnx`). O corte de interrupção ancora numa fronteira de palavra/fonema REAL
+  (decidido no Orquestrador, dado puro) e o renderer só refina o instante acústico numa
+  janela estreita. Snap de energia vira fallback para backends sem fonemas.
+
+Próxima grande evolução: virar um **motor de áudio narrativo completo** (narração +
+SFX/foley + ambiência a partir de prosa). Roadmap em [`docs/ROADMAP.md`](docs/ROADMAP.md);
+detalhes das fases em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Rodar
 

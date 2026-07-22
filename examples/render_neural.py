@@ -79,11 +79,11 @@ def main() -> None:
 
     print(f"\n--- TIMELINE ({_fmt(timeline.total_duration_ms)}) ---")
     for p in timeline.placements:
-        cut = "  [CORTADA]" if p.hard_cut_ms is not None else ""
+        cut = f"  [CORTADA: {p.cut_method}]" if p.hard_cut_ms is not None else ""
         print(f"  {_fmt(p.start_ms)} {_fmt(p.end_ms)} pan={p.pan:>4} gain={p.gain_db:>5.1f}dB "
               f"{p.character:<8}{cut}")
 
-    _diagnostico_snap(timeline, samples, sr, policy)
+    _diagnostico_alinhamento(scene, timeline, clips, sr, policy)
 
     out = Path("build_audio"); out.mkdir(exist_ok=True)
     renderer = TimelineRenderer(sr=sr, policy=policy)
@@ -93,33 +93,60 @@ def main() -> None:
     print(f"\naudio: {path.resolve()}  ({stereo.shape[1]/sr:.2f}s, {sr} Hz)")
 
 
-def _diagnostico_snap(timeline, samples, sr, policy) -> None:
-    """Compara o corte no ALVO puramente matemático vs. onde o snap de fato corta.
+def _diagnostico_alinhamento(scene, timeline, clips, sr, policy) -> None:
+    """A/B do corte de interrupção: alvo matemático cru vs snap de energia vs
+    FORCED ALIGNMENT (fronteira de fonema real do Piper).
 
-    No áudio neural real, o alvo proporcional cru costuma cair no meio de um fonema
-    (energia alta) — o que arruinaria a inteligibilidade. O snap desliza para o vale
-    de energia (silêncio entre palavras). Este diagnóstico mostra os dois lados, e é
-    a prova de que o snap faz trabalho REAL sobre a voz humana (o mock escondia isso).
+    O degrau que o teste com áudio real apontou: o alvo proporcional cai no meio de
+    um fonema (energia alta), e o snap de energia resgata a maioria mas às vezes erra
+    (um vale que não é fronteira). O forced alignment do próprio VITS ancora o corte
+    numa fronteira de palavra/fonema REAL — mostramos os três lado a lado.
     """
-    print("\n--- DIAGNÓSTICO snap_to_valley (áudio real: alvo cru vs snapped) ---")
+    print("\n--- DIAGNÓSTICO forced alignment (alvo cru | snap energia | fronteira fonema) ---")
+    placements = {p.event_id: p for p in timeline.placements}
+    events = list(scene.events)
     any_cut = False
-    for p in timeline.placements:
-        if p.hard_cut_ms is None:
+    for i, ev in enumerate(events):
+        p = placements.get(ev.id)
+        if p is None or p.hard_cut_ms is None:
             continue
         any_cut = True
-        mono = np.asarray(samples[p.event_id], dtype=np.float32)
+        clip = clips[ev.id]
+        mono = np.asarray(clip.samples, dtype=np.float32)
         n = len(mono)
-        target = min(int((p.hard_cut_ms - p.start_ms) / 1000 * sr), n - 1)
-        floor = min(int(policy.min_audible_ms / 1000 * sr), n)
-        snapped = snap_to_valley(mono, target=target, window=int(p.cut_snap_window_ms / 1000 * sr),
-                                 floor=floor, smooth_win=int(0.005 * sr))
-        energy = short_time_energy(mono, win=int(0.005 * sr))
+        align = clip.alignment
+        smooth = int(0.005 * sr)
+        energy = short_time_energy(mono, win=smooth)
         emed = float(np.mean(energy)) + 1e-9
-        r_target = float(energy[target]) / emed
-        r_snap = float(energy[min(snapped, len(energy) - 1)]) / emed
-        verdict = "vale limpo" if r_snap < 0.4 else "aceitavel" if r_snap < 1.0 else "ainda alto"
-        print(f"  {p.event_id}: alvo {target/sr:.2f}s (E/med={r_target:.2f}, meio-fonema) "
-              f"-> snap {snapped/sr:.2f}s (E/med={r_snap:.2f}, {verdict})  desloc {abs(snapped-target)/sr*1000:.0f}ms")
+
+        # alvo proporcional CRU (antes de qualquer snap), reconstruído da política
+        nxt = events[i + 1] if i + 1 < len(events) else None
+        agg = nxt.entry.aggressiveness if nxt else 0.0
+        target = min(policy.interruption_start_within_prev(p.duration_ms, agg), n - 1)
+        target_s = int(target / 1000 * sr)
+        floor_s = min(int(policy.min_audible_ms / 1000 * sr), n)
+        win_s = int(policy.cut_snap_window_ms / 1000 * sr)
+
+        def ratio(s):
+            return float(energy[min(max(s, 0), len(energy) - 1)]) / emed
+
+        def verdict(r):
+            return "vale limpo" if r < 0.4 else "aceitavel" if r < 1.0 else "ALTO(meio-fonema)"
+
+        # 1) energia PURA na janela larga (o método antigo: pode vagar p/ meio de palavra)
+        e_snap = snap_to_valley(mono, target=target_s, window=win_s, floor=floor_s, smooth_win=smooth)
+        # 2) fronteira LINGUÍSTICA que o Orquestrador ancorou (hard_cut, pré-refino)
+        edl_s = int((p.hard_cut_ms - p.start_ms) / 1000 * sr)
+        # 3) refino do renderer: micro-vale numa janela ESTREITA ao redor da fronteira
+        refine_s = snap_to_valley(mono, target=edl_s,
+                                  window=int(p.cut_snap_window_ms / 1000 * sr),
+                                  floor=floor_s, smooth_win=smooth)
+
+        print(f"  {ev.id}  ({p.cut_method}):")
+        print(f"      cru          {target_s/sr:5.2f}s  E/med={ratio(target_s):5.2f}  [{verdict(ratio(target_s))}]")
+        print(f"      energia larga{e_snap/sr:5.2f}s  E/med={ratio(e_snap):5.2f}  [{verdict(ratio(e_snap))}]  (podia vagar p/ meio de palavra)")
+        print(f"      fronteira    {edl_s/sr:5.2f}s  E/med={ratio(edl_s):5.2f}  [{verdict(ratio(edl_s))}]  (junto de {align.phoneme_at(edl_s)!r})" if align else "")
+        print(f"      -> FINAL     {refine_s/sr:5.2f}s  E/med={ratio(refine_s):5.2f}  [{verdict(ratio(refine_s))}]  fronteira + refino acustico")
     if not any_cut:
         print("  (nenhuma interrupção nesta cena)")
 

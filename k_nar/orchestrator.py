@@ -42,6 +42,7 @@ class Orquestrador:
         placements: list[Placement] = []
         cursor_ms = 0          # ponto onde a próxima fala começaria "naturalmente"
         prev: Placement | None = None
+        prev_clip: RenderedClip | None = None
 
         for ev in scene.events:
             clip = clips[ev.id]
@@ -70,10 +71,9 @@ class Orquestrador:
                 placement.fade_in_ms = self.policy.interruption_swell_in_ms
                 placement.crossfade_ms = self.policy.crossfade_ms
                 if start_ms < prev.natural_end_ms:
-                    prev.hard_cut_ms = start_ms
                     prev.fade_out_ms = self.policy.interruption_fade_ms
-                    prev.cut_snap_window_ms = self.policy.cut_snap_window_ms
                     prev.crossfade_ms = self.policy.crossfade_ms
+                    self._resolve_cut(prev, prev_clip, start_ms)
 
             # Sobreposição: a fala que entra também recebe swell equal-power curto.
             if prev is not None and ev.entry.type == EntryType.OVERLAP:
@@ -85,6 +85,7 @@ class Orquestrador:
             pause = self.policy.pause_ms(ev.exit)
             cursor_ms = placement.natural_end_ms + pause
             prev = placement
+            prev_clip = clip
 
         total = max((p.natural_end_ms for p in placements), default=0)
         return Timeline(
@@ -93,6 +94,38 @@ class Orquestrador:
             placements=placements,
             total_duration_ms=total,
         )
+
+    # ------------------------------------------------------------------ #
+    def _resolve_cut(self, prev: Placement, prev_clip: RenderedClip | None,
+                     start_ms: int) -> None:
+        """Decide ONDE cortar a fala interrompida `prev`.
+
+        Se o clip anterior traz forced alignment (Piper), ancoramos o corte numa
+        fronteira REAL de fonema/palavra próxima do ponto de entrada — a EDL passa
+        a carregar a decisão e o renderer só aplica (cut_snap_window_ms=0).
+
+        Sem alinhamento (mock/formante), delegamos ao renderer o snap de energia
+        (fallback auditável): grava o alvo cru e a janela de tolerância na EDL.
+        """
+        alignment = getattr(prev_clip, "alignment", None) if prev_clip else None
+        within_ms = start_ms - prev.start_ms  # ponto de corte relativo ao início do prev
+
+        if alignment:
+            sr = prev_clip.sample_rate
+            target = round(within_ms / 1000 * sr)
+            window = round(self.policy.cut_snap_window_ms / 1000 * sr)
+            floor = min(round(self.policy.min_audible_ms / 1000 * sr), alignment.length)
+            snapped, kind = alignment.snap(target, window=window, floor=floor)
+            prev.hard_cut_ms = prev.start_ms + round(snapped / sr * 1000)
+            # Ancoramos na fronteira LINGUÍSTICA; o renderer só refina dentro de uma
+            # janela ESTREITA p/ o micro-vale acústico (fronteira vozeada != silêncio).
+            prev.cut_snap_window_ms = self.policy.cut_refine_window_ms
+            prev.cut_method = f"fonema:{kind}"
+        else:
+            # Sem alinhamento: alvo cru + janela LARGA p/ o renderer varrer o vale.
+            prev.hard_cut_ms = start_ms
+            prev.cut_snap_window_ms = self.policy.cut_snap_window_ms
+            prev.cut_method = "energia"
 
     # ------------------------------------------------------------------ #
     def _resolve_start(self, ev, prev: Placement | None, cursor_ms: int) -> int:

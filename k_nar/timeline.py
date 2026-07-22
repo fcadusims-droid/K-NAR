@@ -70,10 +70,18 @@ class TimingPolicy:
     # constante (0 dB) — sem estouro nem cancelamento de fase na costura.
     crossfade_ms: int = 40
     # Tolerância que o renderer tem p/ deslizar o corte até um vale de energia
-    # (silêncio/valão) e não decepar no meio de uma consoante plosiva.
-    # É a resposta pragmática ao "forced alignment": corte proporcional escolhido
-    # pelo Orquestrador + ajuste fino acústico dentro desta janela.
+    # (silêncio/valão) e não decepar no meio de uma consoante plosiva. É o FALLBACK
+    # (janela LARGA) usado quando não há forced alignment: sem fronteiras de fonema,
+    # o snap precisa varrer longe p/ achar o vale — arriscando cair no meio de uma
+    # palavra, mas ainda melhor que o corte matemático cru.
     cut_snap_window_ms: int = 55
+    # Janela ESTREITA de refino acústico quando HÁ forced alignment. Medição real
+    # (probe do faber-medium): o alinhamento do VITS é fiel ao áudio (offset ~0), mas
+    # fronteiras palavra-a-palavra vozeadas caem em energia alta — porém sempre há um
+    # micro-vale a <=30ms. O Orquestrador ancora na fronteira LINGUÍSTICA (forced
+    # alignment); o renderer só desliza dentro desta janela curta p/ o instante
+    # acusticamente limpo. Os dois sinais, cada um no que é melhor.
+    cut_refine_window_ms: int = 30
 
     # ------------------------------------------------------------------ #
     #  Traduções relativo -> real                                        #
@@ -134,6 +142,11 @@ class Placement:
     crossfade_ms: int = 0
     # Ganho de dinâmica (dB) derivado da tensão — contraste sussurro/grito no mix.
     gain_db: float = 0.0
+    # Como o corte de interrupção foi decidido: "" (não cortada), "energia" (o
+    # renderer desliza p/ o vale — fallback), ou "fonema:<tipo>" (o Orquestrador
+    # já ancorou numa fronteira REAL de fonema via forced alignment). Quando é
+    # "fonema:*", cut_snap_window_ms=0 e o renderer aplica o corte direto.
+    cut_method: str = ""
 
     @property
     def end_ms(self) -> int:

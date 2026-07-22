@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from k_nar.align import Alignment
 from k_nar.models import SpeechEvent
 from k_nar.prosody import ProsodyPolicy
 from k_nar.render.dsp import resample_linear
@@ -25,10 +26,20 @@ from k_nar.tts.base import RenderedClip
 
 
 class PiperTTSBackend:
-    def __init__(self, model_path: str, prosody: ProsodyPolicy | None = None):
+    def __init__(self, model_path: str, prosody: ProsodyPolicy | None = None,
+                 align: bool = True):
         from piper import PiperVoice  # import tardio
         self.model_path = model_path
-        self.voice = PiperVoice.load(model_path)
+        # include_alignments=True faz o Piper expor a duração por fonema (forced
+        # alignment do próprio VITS). Requer o pacote `onnx` para o patch em memória;
+        # sem ele, seguimos sem alinhamento e o corte cai no snap de energia.
+        self.align = align
+        try:
+            self.voice = PiperVoice.load(model_path, include_alignments=align)
+            self._has_align = align
+        except Exception:  # pragma: no cover — onnx ausente / modelo não-patchável
+            self.voice = PiperVoice.load(model_path)
+            self._has_align = False
         self.sr = self.voice.config.sample_rate
         self.prosody = prosody or ProsodyPolicy()
 
@@ -59,15 +70,22 @@ class PiperTTSBackend:
             noise_w_scale=float(pros.noise_w),
             normalize_audio=True,
         )
-        chunks = list(self.voice.synthesize(event.text, syn_config=cfg))
+        chunks = list(self.voice.synthesize(
+            event.text, syn_config=cfg, include_alignments=self._has_align))
         if not chunks:
             return RenderedClip(event.id, 0, sample_rate=self.sr,
                                 samples=np.zeros(1, np.float32))
         audio = np.concatenate([c.audio_float_array.astype(np.float32) for c in chunks])
 
+        # Forced alignment: concatena os fonemas de todos os chunks no domínio de
+        # amostras CRU (pré-reamostragem), acompanhando os offsets de áudio.
+        alignment = self._collect_alignment(chunks)
+
         # reamostra por 1/p -> pitch x p, duração volta ao alvo de length_scale
         if abs(p - 1.0) > 1e-3:
             audio = resample_linear(audio, 1.0 / p)
+            if alignment is not None:
+                alignment = alignment.scaled(1.0 / p)
 
         peak = float(np.max(np.abs(audio))) or 1.0
         audio = (audio / peak * 0.9).astype(np.float32)
@@ -77,4 +95,24 @@ class PiperTTSBackend:
             duration_ms=int(round(1000 * len(audio) / self.sr)),
             sample_rate=self.sr,
             samples=audio,
+            alignment=alignment,
         )
+
+    # ------------------------------------------------------------------ #
+    def _collect_alignment(self, chunks) -> Alignment | None:
+        """Junta `phoneme_alignments` de todos os chunks num só `Alignment`.
+
+        Cada chunk alinha só o próprio áudio; ao concatenar o áudio, os offsets de
+        fonema precisam acumular o comprimento dos chunks anteriores.
+        """
+        if not self._has_align:
+            return None
+        merged = []
+        for c in chunks:
+            al = getattr(c, "phoneme_alignments", None)
+            if not al:
+                return None  # um chunk sem alinhamento invalida o corte fonético
+            merged.extend(al)
+        if not merged:
+            return None
+        return Alignment.from_piper(merged, self.sr)

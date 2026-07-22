@@ -47,12 +47,20 @@ class TrimmedTTS:
         trimmed, lead, trail = trim_silence(mono, self.threshold_db, self.keep_ms, sr)
         if len(trimmed) == 0:
             trimmed = mono  # fala inteira abaixo do threshold: não descarta
+            lead = 0
+
+        # O forced alignment sofre o MESMO corte de bordas que o áudio: sem isso, as
+        # fronteiras de fonema apontariam para índices do sinal pré-trim.
+        alignment = clip.alignment
+        if alignment is not None:
+            alignment = alignment.trimmed(lead, len(trimmed))
 
         out = RenderedClip(
             event_id=clip.event_id,
             duration_ms=int(round(1000 * len(trimmed) / sr)),  # duração REMEDIDA
             sample_rate=sr,
             samples=trimmed,
+            alignment=alignment,
         )
         self._cache[event.id] = out
         return out

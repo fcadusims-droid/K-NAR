@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+from k_nar.align import Alignment
 from k_nar.models import SpeechEvent
 
 
@@ -29,6 +30,11 @@ class RenderedClip:
     # Anotado como `object` de propósito: o CORE não importa numpy; só a camada
     # de render (que já depende de numpy) preenche/lê este campo.
     samples: object | None = None
+    # Forced alignment (fonema→amostra) quando o backend o exporta (ex.: Piper com
+    # include_alignments). É DADO PURO (stdlib): permite o Orquestrador resolver o
+    # corte de interrupção numa fronteira de fonema REAL, sem tocar no áudio. None
+    # nos backends que não alinham (mock/formante) — aí o renderer cai no snap de energia.
+    alignment: "Alignment | None" = None
 
 
 @runtime_checkable

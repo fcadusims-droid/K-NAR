@@ -13,7 +13,7 @@ dependencies = []
 
 [project.optional-dependencies]
 # Backends reais de TTS e o motor de DSP entram como EXTRAS, isolados do core.
-tts = ["piper-tts>=1.4", "numpy>=1.24"]    # TTS neural real (Piper, CPU)
+tts = ["piper-tts>=1.5", "onnx>=1.16", "numpy>=1.24"]  # TTS neural real + forced alignment (Piper, CPU)
 dsp = ["numpy>=1.24", "pedalboard>=0.9"]   # camada de render: sintese, mix, reverb
 llm = ["llama-cpp-python>=0.2"]            # Director com LLM local (GGUF em CPU)
 dev = ["pytest", "numpy>=1.24", "pedalboard>=0.9"]

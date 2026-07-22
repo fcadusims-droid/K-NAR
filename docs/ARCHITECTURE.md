@@ -191,16 +191,50 @@ Preparam o terreno antes de plugar o XTTS, cuja saída é "caótica":
    tolerância decidida pela política. É um stand-in leve de *forced alignment*:
    corte proporcional escolhido pelo Orquestrador + ajuste acústico fino no renderer.
 
+## Forced alignment no corte de interrupção (implementado)
+
+O degrau que o áudio real apontou. O Piper (VITS) tem um preditor de duração
+interno e, com `include_alignments`, EXPÕE quantas amostras cada fonema ocupa —
+*forced alignment de verdade*, do próprio modelo, sem aligner externo (whisperx/MFA)
+e sem baixar mais nada. Só precisa do pacote `onnx` (patch do grafo em memória).
+
+O achado de acoplamento: como o alinhamento é **dado puro** (índices de amostra, sem
+áudio), a decisão do corte SOBE do renderer (que adivinhava por energia) para o
+**Orquestrador**, que já tem o alinhamento e a duração real. A EDL carrega a decisão.
+
+| Módulo | Papel |
+|---|---|
+| `k_nar/align.py` | `Alignment`/`PhonemeSpan`: fronteiras fonema→amostra, stdlib puro. Transforma-se junto do áudio (`scaled` p/ o pitch-shift, `trimmed` p/ o trim de silêncio) e faz o `snap` à melhor fronteira (pontuação > palavra > fonema). |
+| `tts/neural.py` | `PiperTTSBackend` carrega com `include_alignments`, coleta os fonemas dos chunks e escala pelo pitch-shift. |
+| `orchestrator.py::_resolve_cut` | ancora o corte na fronteira LINGUÍSTICA via `Alignment.snap`; sem alinhamento, cai no fallback de energia (auditável). |
+
+**Híbrido linguístico + acústico** (validado por medição no faber-medium): o
+alinhamento do VITS é fiel ao áudio (offset ~0ms), MAS fronteiras palavra-a-palavra
+vozeadas ("não‧deve") caem em energia alta — porém sempre há um micro-vale a ≤30ms.
+Então: o Orquestrador ancora na **fronteira** (janela larga, `Alignment.snap`) e o
+renderer só desliza numa **janela estreita** (`cut_refine_window_ms`, ~30ms) até o
+instante acusticamente limpo. Cada sinal no que é melhor — o corte final fica numa
+fronteira de palavra REAL *e* num vale de energia. O snap de energia de janela larga
+vira o fallback para backends que não exportam fonemas (mock/formante). Ver o A/B em
+`examples/render_neural.py` (alvo cru → energia larga → fronteira → refino final).
+
 ## O que ainda NÃO existe (próximos passos)
 
-1. **Forced alignment** para o corte de interrupção: substituir o snap de energia
-   por fronteiras de fonema reais (aligner externo tipo whisperx/MFA, ou um modelo
-   Piper que exporte `phoneme_alignments`). É o degrau que o teste com áudio real
-   apontou — o snap resolve a maioria mas não todos os cortes.
-2. **Voz distinta por personagem** com modelo real por voz (o pitch por personagem
+1. **Voz distinta por personagem** com modelo real por voz (o pitch por personagem
    ajuda, mas não substitui timbres de modelos diferentes ou XTTS com clonagem).
-3. **Crossfade equal-power em `sobreposicao` longa** (hoje o equal-power cobre a
+2. **Crossfade equal-power em `sobreposicao` longa** (hoje o equal-power cobre a
    costura de interrupção; na fala simultânea prolongada as vozes dependem do limiter).
-4. QA acústico automatizado (clipping, overlaps que engolem palavras).
-5. Calibrar mais o `LlamaDirector`: o few-shot quebrou a saturação, mas o 1.5B ainda
+3. QA acústico automatizado (clipping, overlaps que engolem palavras).
+4. Calibrar mais o `LlamaDirector`: o few-shot quebrou a saturação, mas o 1.5B ainda
    subusa "baixa". Mais exemplos ou um modelo maior sharpeariam a escala.
+
+## Visão: motor de áudio narrativo completo (roadmap)
+
+O alvo maior é o K-NAR deixar de ser um motor de *diálogo* e virar um motor de
+*áudio narrativo*: dada uma história em prosa (cenas, ações, diálogos), gerar o
+audiobook dramatizado inteiro — narração, vozes, foley (efeitos pontuais),
+ambiência e (futuro) música. O insight é que a EDL já é a peça certa: um SFX é só
+mais um evento na linha de tempo (início relativo, duração real, ganho, pan). As
+fases 3–6 generalizam `SpeechEvent` numa união `Event`, tornam a Timeline
+multitrack (buses de diálogo/foley/ambiência com ducking sidechain) e adicionam a
+PASSAGEM 0 (Screenwriter: prosa → grafo de cenas). Ver `docs/ROADMAP.md`.
