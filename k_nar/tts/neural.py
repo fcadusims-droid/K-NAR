@@ -27,9 +27,11 @@ from k_nar.tts.base import RenderedClip
 
 class PiperTTSBackend:
     def __init__(self, model_path: str, prosody: ProsodyPolicy | None = None,
-                 align: bool = True):
+                 align: bool = True, speaker_id: int | None = None):
         from piper import PiperVoice  # import tardio
         self.model_path = model_path
+        # Locutor num modelo Piper multi-speaker (VITS pode ter vários). None = mono.
+        self.speaker_id = speaker_id
         # include_alignments=True faz o Piper expor a duração por fonema (forced
         # alignment do próprio VITS). Requer o pacote `onnx` para o patch em memória;
         # sem ele, seguimos sem alinhamento e o corte cai no snap de energia.
@@ -49,7 +51,8 @@ class PiperTTSBackend:
         import os
         p = self.prosody
         sig = f"{p.length_scale_calm},{p.length_scale_tense},{p.pitch_calm},{p.pitch_tense}"
-        return f"piper:{os.path.basename(self.model_path)}:{sig}"
+        spk = "" if self.speaker_id is None else f":spk{self.speaker_id}"
+        return f"piper:{os.path.basename(self.model_path)}{spk}:{sig}"
 
     # ------------------------------------------------------------------ #
     def synthesize(self, event: SpeechEvent) -> RenderedClip:
@@ -69,6 +72,7 @@ class PiperTTSBackend:
             noise_scale=float(pros.noise_scale),
             noise_w_scale=float(pros.noise_w),
             normalize_audio=True,
+            speaker_id=self.speaker_id,
         )
         chunks = list(self.voice.synthesize(
             event.text, syn_config=cfg, include_alignments=self._has_align))

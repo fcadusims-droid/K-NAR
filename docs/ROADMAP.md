@@ -41,12 +41,13 @@ do próprio Piper/VITS via `include_alignments`), com refino acústico numa jane
 estreita. Fallback de energia para backends sem fonemas. **Reaproveitado na Fase 5**
 para ancorar o foley ao verbo exato da ação. Ver `docs/ARCHITECTURE.md`.
 
-### Fase 2 — Voz por personagem + QA acústico
-* Modelos/perfis de voz distintos por personagem atrás do mesmo `TTSBackend`
-  (`Protocol`) — sem tocar no Orquestrador.
-* Detector automatizado de clipping e de overlaps que engolem palavras (estende o
-  `Timeline.overlaps()` que já existe). Vira a rede de segurança ANTES de multiplicar
-  as camadas de áudio nas fases seguintes.
+### Fase 2 — Voz por personagem + QA acústico ✅
+* `VoiceProfile` + `MultiVoiceTTSBackend`: modelos/perfis de voz distintos por
+  personagem atrás do mesmo `TTSBackend` (`Protocol`) — sem tocar no Orquestrador.
+  Suporte a `speaker_id` (modelos VITS multi-locutor). Demo com faber+jeff reais.
+* `k_nar/qa.py`: detector automatizado de clipping/pico (`check_mix`) e de overlaps
+  que engolem palavras / cortes agressivos / cruzamentos inesperados (`check_timeline`).
+  CI roda a suíte a cada push/PR. Rede de segurança ANTES de multiplicar as camadas.
 
 ### Fase 3 — Generalizar `Event` + Timeline multitrack
 * `SpeechEvent` → união `Event` com um campo discriminador; adicionar

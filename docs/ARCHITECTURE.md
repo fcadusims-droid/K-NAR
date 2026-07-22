@@ -218,15 +218,32 @@ fronteira de palavra REAL *e* num vale de energia. O snap de energia de janela l
 vira o fallback para backends que não exportam fonemas (mock/formante). Ver o A/B em
 `examples/render_neural.py` (alvo cru → energia larga → fronteira → refino final).
 
+## Voz distinta por personagem + QA acústico (implementado)
+
+Voz real por personagem (não só o pitch-shift sobre um locutor único) e a rede de
+segurança que precede as camadas narrativas.
+
+| Módulo | Papel |
+|---|---|
+| `tts/multivoice.py` | `VoiceProfile` (modelo próprio / `speaker_id` / pitch / ritmo por personagem) + `MultiVoiceTTSBackend`: roteia cada fala para o backend Piper certo, cacheando UM modelo por (arquivo, locutor). Satisfaz `TTSBackend` — o Orquestrador não muda. |
+| `tts/neural.py` | `PiperTTSBackend` aceita `speaker_id` (modelos VITS multi-locutor). |
+| `k_nar/qa.py` | `check_timeline` (EDL, stdlib): sobreposição que engole palavra, corte agressivo demais, cruzamento sequencial inesperado. `check_mix` (a partir de `dsp.clipping_stats`): clipping/pico perigoso. `format_report` p/ CI. |
+| `render/dsp.py::clipping_stats` | mede pico e amostras clipadas (dado puro p/ o QA decidir sem numpy). |
+
+`examples/multivoice_qa.py` roteia Alien A→faber e Alien B→jeff (dois modelos PT-BR
+distintos, timbres reais) e imprime o relatório de QA. Vozes por `scripts/download_piper.sh [voz]`.
+
+A CI (`.github/workflows/tests.yml`) roda a suíte a cada push/PR (usa mock/formante,
+sem baixar modelos) — o QA da EDL e do mix vira portão automatizado.
+
 ## O que ainda NÃO existe (próximos passos)
 
-1. **Voz distinta por personagem** com modelo real por voz (o pitch por personagem
-   ajuda, mas não substitui timbres de modelos diferentes ou XTTS com clonagem).
-2. **Crossfade equal-power em `sobreposicao` longa** (hoje o equal-power cobre a
+1. **Crossfade equal-power em `sobreposicao` longa** (hoje o equal-power cobre a
    costura de interrupção; na fala simultânea prolongada as vozes dependem do limiter).
-3. QA acústico automatizado (clipping, overlaps que engolem palavras).
-4. Calibrar mais o `LlamaDirector`: o few-shot quebrou a saturação, mas o 1.5B ainda
+2. Calibrar mais o `LlamaDirector`: o few-shot quebrou a saturação, mas o 1.5B ainda
    subusa "baixa". Mais exemplos ou um modelo maior sharpeariam a escala.
+3. As **fases narrativas** (3–6): união `Event`, Timeline multitrack, Screenwriter
+   (PASSAGEM 0), SFX/foley + ambiência + ducking. Ver `docs/ROADMAP.md`.
 
 ## Visão: motor de áudio narrativo completo (roadmap)
 

@@ -69,6 +69,13 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
   (decidido no Orquestrador, dado puro) e o renderer só refina o instante acústico numa
   janela estreita. Snap de energia vira fallback para backends sem fonemas.
 
+**Voz por personagem + QA (`k_nar/tts/multivoice.py`, `k_nar/qa.py`):**
+
+- `MultiVoiceTTSBackend` — `VoiceProfile` por personagem (modelo Piper próprio,
+  `speaker_id`, pitch/ritmo). Roteia atrás do mesmo `TTSBackend`; o Orquestrador não muda.
+- `check_timeline`/`check_mix` — QA automatizado: overlaps que engolem, cortes
+  agressivos, clipping. Rodam no CI a cada push/PR.
+
 Próxima grande evolução: virar um **motor de áudio narrativo completo** (narração +
 SFX/foley + ambiência a partir de prosa). Roadmap em [`docs/ROADMAP.md`](docs/ROADMAP.md);
 detalhes das fases em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -90,9 +97,13 @@ python -m examples.render_scene
 python -m examples.direct_and_render                 # Director por regras
 python -m examples.direct_and_render examples/roteiro_exemplo.json --llm   # Director LLM
 
-# pipeline NEURAL: voz Piper real + cache + sintese paralela + diagnostico do snap
+# pipeline NEURAL: voz Piper real + cache + sintese paralela + forced alignment
 python -m examples.render_neural                 # Director por regras
 python -m examples.render_neural roteiro.json --llm   # Director LLM (few-shot)
+
+# voz DISTINTA por personagem (faber+jeff) + relatorio de QA acustico
+scripts/download_piper.sh jeff                    # segunda voz real
+python -m examples.multivoice_qa
 
 # provas: trim + crossfade | expressividade (mesma frase em 4 tensoes)
 python -m examples.proof_dsp
