@@ -35,6 +35,20 @@ def make_impulse_response(name: str, sr: int) -> np.ndarray:
         # corredor: médio, algumas reflexões tardias
         "corredor_estreito": dict(rt=0.6, early=(11, 29, 47, 71), early_gain=0.45, lp=0.35,
                                   metallic=False),
+        # GALPÃO VAZIO: cauda longa, eco nítido de reflexões duras (paredes distantes,
+        # vazio) — é o "eco na voz" de dois personagens num espaço grande e vazio.
+        "galpao_vazio": dict(rt=1.7, early=(29, 53, 83, 121, 167), early_gain=0.6, lp=0.4,
+                             metallic=False),
+        # catedral: cauda MUITO longa e brilhante (pedra alta)
+        "catedral": dict(rt=3.2, early=(41, 79, 131, 197), early_gain=0.45, lp=0.25, metallic=False),
+        # caverna: longa, escura e irregular (rocha)
+        "caverna": dict(rt=2.4, early=(37, 67, 113, 179, 233), early_gain=0.5, lp=0.7, metallic=False),
+        # quarto pequeno: cauda curta e apertada
+        "quarto_pequeno": dict(rt=0.28, early=(7, 17, 29), early_gain=0.4, lp=0.5, metallic=False),
+        # banheiro: curto, brilhante, com flutter (azulejo)
+        "banheiro": dict(rt=0.5, early=(5, 11, 17, 23, 31), early_gain=0.55, lp=0.1, metallic=True),
+        # túnel: médio-longo e metálico
+        "tunel": dict(rt=1.3, early=(23, 47, 79, 113), early_gain=0.55, lp=0.45, metallic=True),
         # seco: quase sem reverb (IR ~ impulso)
         "seco": dict(rt=0.05, early=(), early_gain=0.0, lp=0.0, metallic=False),
     }

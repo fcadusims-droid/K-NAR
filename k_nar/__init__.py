@@ -25,6 +25,7 @@ from k_nar.models import (
 from k_nar.mixpolicy import MixPolicy
 from k_nar.orchestrator import Orquestrador
 from k_nar.prosody import Prosody, ProsodyPolicy
+from k_nar.proximity import ProximityPolicy
 from k_nar.qa import QAIssue, check_mix, check_timeline, format_report
 from k_nar.schema import SchemaError, validate_scene
 from k_nar.timeline import Placement, Timeline, TimingPolicy
@@ -48,6 +49,7 @@ __all__ = [
     "PhonemeSpan",
     "Prosody",
     "ProsodyPolicy",
+    "ProximityPolicy",
     "QAIssue",
     "RenderedClip",
     "Scene",

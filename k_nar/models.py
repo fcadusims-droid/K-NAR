@@ -197,6 +197,10 @@ class SfxEvent:
     track: Track = Track.SFX
     character: str = ""                    # duck-typing c/ o Orquestrador (sem voz)
     text: str = ""                         # descrição opcional (nunca falada)
+    # DISTÂNCIA do som: "perto" | "media" | "longe" | "muito_longe". O `ProximityPolicy`
+    # traduz em nível + abafamento (o ar come os agudos de longe) + largura estéreo —
+    # "tiros ao longe" ≠ "à queima-roupa".
+    distance: str = "media"
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "SfxEvent":
@@ -209,6 +213,7 @@ class SfxEvent:
             entry=EntryDynamics.from_dict(d.get("entrada", d.get("dinamica_de_entrada"))),
             exit=ExitDynamics.from_dict(d.get("saida", d.get("dinamica_de_saida"))),
             text=str(d.get("texto", d.get("descricao", ""))),
+            distance=str(d.get("distancia", d.get("distance", "media"))).strip().lower(),
         )
 
 

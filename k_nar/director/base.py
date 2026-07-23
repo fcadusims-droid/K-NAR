@@ -103,6 +103,8 @@ class BaseDirector:
             out["descricao"] = str(item["texto"])
         if "ganho_db" in item or "gain_db" in item:
             out["ganho_db"] = item.get("ganho_db", item.get("gain_db"))
+        if item.get("distancia") or item.get("distance"):
+            out["distancia"] = item.get("distancia", item.get("distance"))
         return out
 
     def _narration_event(self, item, index, texto) -> dict[str, Any]:

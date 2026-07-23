@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from k_nar.models import EntryType, Scene, Track
 from k_nar.prosody import ProsodyPolicy
+from k_nar.proximity import ProximityPolicy
 from k_nar.timeline import Placement, Timeline, TimingPolicy
 from k_nar.tts.base import RenderedClip, TTSBackend
 
@@ -26,12 +27,15 @@ def _track_of(ev) -> str:
 
 class Orquestrador:
     def __init__(self, tts: TTSBackend, policy: TimingPolicy | None = None,
-                 prosody: ProsodyPolicy | None = None):
+                 prosody: ProsodyPolicy | None = None,
+                 proximity: ProximityPolicy | None = None):
         self.tts = tts
         self.policy = policy or TimingPolicy()
         # mesma matriz de prosódia do backend neural: o ganho de dinâmica na EDL
         # fica consistente com o pitch/rate que o TTS já aplicou na onda.
         self.prosody = prosody or ProsodyPolicy()
+        # matriz distância → acústica (nível/abafamento/largura) dos SFX.
+        self.proximity = proximity or ProximityPolicy()
 
     # ------------------------------------------------------------------ #
     def render_scene(self, scene: Scene,
@@ -90,6 +94,10 @@ class Orquestrador:
                 gain_db=self._gain_of(ev),
             )
 
+            # Distância (só SFX): "ao longe" -> mais baixo, abafado e mais central.
+            if cur_track == Track.SFX.value:
+                self._apply_proximity(placement, getattr(ev, "distance", "media"))
+
             # Interrupção: esta fala SOBE sobre a cauda da anterior ("swell") e
             # CORTA a anterior no ponto de entrada, com crossfade equal-power + snap.
             if prev is not None and etype == EntryType.INTERRUPTION:
@@ -134,6 +142,15 @@ class Orquestrador:
         )
 
     # ------------------------------------------------------------------ #
+    def _apply_proximity(self, p: Placement, distance: str) -> None:
+        """Grava na EDL a acústica da distância: ganho, pan (mais central quando longe)
+        e o corte de passa-baixa (abafamento). O renderer só aplica."""
+        prox = self.proximity.resolve(distance)
+        p.distance = distance
+        p.gain_db += prox.gain_db
+        p.pan = int(max(-100, min(100, round(p.pan * prox.pan_scale))))
+        p.lowpass_hz = prox.lowpass_hz
+
     def _gain_of(self, ev) -> float:
         """Ganho de dinâmica do evento: por tensão (fala, coerente c/ o TTS) ou o
         ganho fixo do próprio evento (SFX)."""

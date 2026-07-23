@@ -66,10 +66,15 @@ class RuleBasedScreenwriter:
     # Uma frase é "só som" (vira SFX e NÃO é narrada) se tem gatilho de som pontual,
     # é curta e não menciona um personagem (nome próprio) — é uma didascália sonora.
     _PURE_SFX_MAX_WORDS = 8
+    # Máximo de camas de ambiência simultâneas (evita empilhar beds incoerentes).
+    _MAX_AMBIENCES = 3
 
     def write(self, prose: str, scene_id: str = "cena", ambiance: str = "seco",
               narrator: bool = True, lang: str = "pt") -> dict[str, Any]:
         lex = get_lexicon(lang)
+        # Diálogo por TRAVESSÃO (— Fala — disse Fulano) é o padrão literário em PT/ES;
+        # convertemos para aspas para reusar toda a maquinaria de atribuição.
+        prose = self._travessoes_para_aspas(prose, lex)
         quotes: list[str] = []
 
         def _mask(m: re.Match) -> str:
@@ -111,15 +116,22 @@ class RuleBasedScreenwriter:
                 continue
 
             amb_tag = self._ambience_trigger(text, lex)
-            if amb_tag and amb_tag not in ambiences:
-                ambiences[amb_tag] = text  # cama de fundo (dedupe por tag)
+            if amb_tag:
+                # conta frequência: uma cama é a atmosfera PERSISTENTE, não uma menção
+                # de passagem. No fim, mantemos só as mais recorrentes (evita empilhar
+                # ambiências incoerentes de uma palavra solta: "tempestade formando longe").
+                c, _ = ambiences.get(amb_tag, (0, text))
+                ambiences[amb_tag] = (c + 1, text)
 
             sfx_tag = self._sfx_trigger(text, lex)
             pure_sound = bool(sfx_tag) and self._is_pure_sound_cue(text, lex)
             if sfx_tag:
                 counter += 1
-                elementos.append({"id": f"sfx_{counter}", "tipo": "sfx",
-                                  "tag": sfx_tag, "texto": text})
+                el = {"id": f"sfx_{counter}", "tipo": "sfx", "tag": sfx_tag, "texto": text}
+                dist = self._distance_of(text, lex)   # "ao longe" -> som distante
+                if dist != "media":
+                    el["distancia"] = dist
+                elementos.append(el)
                 acoes.append({"gatilho": sfx_tag, "texto": text, "ancora": f"sfx_{counter}"})
 
             # Narração: só se há narrador E a frase não é uma didascália sonora pura
@@ -128,14 +140,73 @@ class RuleBasedScreenwriter:
                 counter += 1
                 elementos.append({"id": f"narr_{counter}", "tipo": "narracao", "texto": text})
 
-        # camas de ambiência primeiro (cobrem a cena inteira; ordem é indiferente)
+        # camas de ambiência: mantém só as MAIS_AMBIENCES mais frequentes (a atmosfera
+        # dominante), evitando um empilhamento incoerente de beds soltos.
+        top = sorted(ambiences.items(), key=lambda kv: (-kv[1][0], kv[0]))[: self._MAX_AMBIENCES]
         beds = [{"id": f"amb_{i+1}", "tipo": "ambiencia", "tag": tag, "texto": src}
-                for i, (tag, src) in enumerate(ambiences.items())]
+                for i, (tag, (_c, src)) in enumerate(top)]
 
-        return {"cena_id": scene_id, "ambientacao": ambiance,
+        # Espaço acústico: se o autor não fixou a ambiência (default "seco"), detecta
+        # o lugar na prosa ("galpão vazio" → eco de galpão na voz de todos).
+        final_ambiance = ambiance
+        if not ambiance or ambiance == "seco":
+            final_ambiance = self._detect_space(prose, lex) or ambiance
+
+        return {"cena_id": scene_id, "ambientacao": final_ambiance,
                 "elementos": beds + elementos, "acoes": acoes}
 
+    @staticmethod
+    def _detect_space(prose: str, lex: Lexicon) -> str | None:
+        """Preset de reverb do ESPAÇO dominante na prosa (galpão/catedral/caverna...)."""
+        if not lex.space_triggers:
+            return None
+        counts: dict[str, int] = {}
+        for w in _WORD_RE.findall(prose):
+            preset = lex.space_triggers.get(_norm(w))
+            if preset:
+                counts[preset] = counts.get(preset, 0) + 1
+        return max(counts, key=counts.get) if counts else None
+
     # ------------------------------------------------------------------ #
+    def _travessoes_para_aspas(self, prose: str, lex: Lexicon) -> str:
+        """Converte linhas de diálogo por travessão em aspas.
+
+            — Quieto hoje — comenta Baiano, ao lado dele.
+              -> "Quieto hoje", comenta Baiano, ao lado dele.
+            — Não sei. — respondeu ela. — É o trabalho.
+              -> "Não sei. É o trabalho.", respondeu ela.
+
+        A fala é o(s) segmento(s) sem verbo de fala; o segmento com verbo é a
+        atribuição, que sai FORA das aspas (o parser de atribuição a lê depois)."""
+        out = []
+        for line in prose.split("\n"):
+            s = line.strip()
+            if s[:1] not in ("—", "–"):        # só travessão (não hífen -, que é lista/palavra)
+                out.append(line)
+                continue
+            inner = s.lstrip("—–").strip()
+            segs = [seg.strip() for seg in re.split(r"\s*[—–]\s*", inner) if seg.strip()]
+            fala, atrib = [], []
+            for i, seg in enumerate(segs):
+                words = _WORD_RE.findall(seg)
+                # atribuição: segmento (após o 1º) cujo verbo de fala aparece no
+                # INÍCIO ("comenta Baiano...", "responde Renê..."). Robusto a atribuições
+                # longas — o que importa é o verbo vir cedo, não o tamanho.
+                if i > 0 and any(_norm(w) in lex.speech_verbs for w in words[:3]):
+                    atrib.append(seg)
+                else:
+                    fala.append(seg)
+            if not fala:
+                out.append(line)
+                continue
+            quoted = '"' + " ".join(fala) + '"'
+            if atrib:
+                quoted += ", " + " ".join(atrib)
+                if quoted[-1] not in ".!?":
+                    quoted += "."
+            out.append(quoted)
+        return "\n".join(out)
+
     @staticmethod
     def _sentences(text: str) -> list[str]:
         """Quebra em frases por [.!?…] + espaço. As aspas já estão mascaradas, então
@@ -165,6 +236,20 @@ class RuleBasedScreenwriter:
         if "passos_poca" in tags:
             return "passos_poca"
         return tags[0]
+
+    @staticmethod
+    def _distance_of(text: str, lex: Lexicon) -> str:
+        """Distância do som na frase: 'ao longe' → longe, 'à queima-roupa' → perto."""
+        words = {_norm(w) for w in _WORD_RE.findall(text)}
+        if "queima" in words and "roupa" in words:      # à queima-roupa
+            return "perto"
+        if words & lex.far_words:
+            if words & {"horizonte", "lonjura", "horizon"}:
+                return "muito_longe"                     # bem no fim do horizonte
+            return "longe"
+        if words & lex.near_words:
+            return "perto"
+        return "media"
 
     @staticmethod
     def _ambience_trigger(text: str, lex: Lexicon) -> str | None:

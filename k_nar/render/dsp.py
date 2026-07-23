@@ -161,6 +161,23 @@ def resample_linear(mono: np.ndarray, ratio: float) -> np.ndarray:
     return np.interp(x_new, x_old, mono).astype(np.float32)
 
 
+def lowpass_1pole(mono: np.ndarray, cutoff_hz: float, sr: int) -> np.ndarray:
+    """Passa-baixa one-pole (escurece o som). Base do 'abafamento' da distância: o ar
+    absorve os agudos, então um som ao longe perde brilho. `cutoff_hz`<=0 -> sem efeito."""
+    if cutoff_hz <= 0 or len(mono) == 0:
+        return mono.astype(np.float32, copy=False)
+    coeff = float(np.exp(-2.0 * np.pi * cutoff_hz / sr))  # 0..1, maior = mais escuro
+    out = np.empty_like(mono, dtype=np.float32)
+    acc = 0.0
+    one_minus = 1.0 - coeff
+    for i in range(len(mono)):
+        acc = coeff * acc + one_minus * float(mono[i])
+        out[i] = acc
+    # NÃO renormaliza: a perda de nível dos agudos É o abafamento da distância. As
+    # frequências baixas passam ~intactas, então a presença do "corpo" do som fica.
+    return out
+
+
 def peak_normalize(stereo: np.ndarray, target: float = 0.89) -> np.ndarray:
     """Normaliza pelo pico (evita clipping). target ~ -1 dBFS."""
     peak = float(np.max(np.abs(stereo))) if stereo.size else 0.0
