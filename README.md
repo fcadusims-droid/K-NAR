@@ -128,6 +128,32 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
   — a narração É o protagonista: **mesma voz** das falas dele e **dentro da cena** (leva o
   eco do cômodo). Detectado da narração (`pessoa: auto`) ou fixo no front-matter.
 
+**Atuação — os personagens *performam* (`k_nar/emotion.py`, `k_nar/narrative/acting.py`):**
+
+- O K-NAR **infere a emoção de cada linha** (pontuação, palavras de emoção, o verbo de
+  fala, o **clima da cena** que sobe no suspense, e a **reação** à linha anterior) e a
+  atua via `EmotionPolicy` — ritmo, tom, tremor, ganho e **pausas**. Medo = agudo/rápido/
+  trêmulo; raiva = grave/forte/alto; tristeza = lento/baixo. Cada personagem tem um
+  **temperamento** (o veterano calmo × o novato nervoso) que enviesa a atuação.
+
+**Cômodo mobiliado × vazio (`k_nar/space/`):**
+
+- Um cômodo **mobiliado e em uso é seco** (a mobília absorve) — nada de "eco de caverna"
+  num escritório. Só um espaço **vazio/nu/em reforma** ecoa. O K-NAR lê os móveis e as
+  pistas de vazio na prosa e ajusta a absorção (`Zone.damping`).
+
+**Voz de ALTA qualidade — XTTS (`k_nar/tts/xtts.py`, opt-in):**
+
+- `--voz xtts` troca o Piper pelo **XTTS-v2** (timbre muito mais natural, prosódia viva),
+  com voz por personagem via locutor de estúdio + a mesma `EmotionPolicy`. É **lento**
+  (segundos/frase; requer `coqui-tts` + `torch`) — opt-in. O Piper segue o padrão rápido.
+
+**Entrega sob limite de tamanho (`scripts/package_audio.py`):**
+
+- Audiobook longo em qualidade máxima → **Opus** (metade do tamanho do MP3 na mesma
+  qualidade); se ainda passar do limite, **divide em partes** (cortando no silêncio),
+  cada uma sob o teto. Zip/rar não serve (áudio já é comprimido).
+
 Roadmap em [`docs/ROADMAP.md`](docs/ROADMAP.md); detalhes das fases em
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 

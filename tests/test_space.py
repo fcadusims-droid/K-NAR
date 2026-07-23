@@ -68,6 +68,40 @@ class TestSceneModel(unittest.TestCase):
         self.assertEqual(m2.default_zone, "cozinha")
 
 
+class TestFurnishingDamping(unittest.TestCase):
+    def test_furnished_room_is_dry_empty_room_echoes(self):
+        from k_nar.narrative import RuleBasedScreenwriter
+        def damp(prose):
+            sc = RuleBasedScreenwriter().write(prose, lang="pt")
+            m = SceneModel.from_dict(sc["espaco"])
+            return m.zones["escritorio"].effective_damping
+        furnished = damp("Entrei no escritorio cheio de mesas, cadeiras e arquivos. Fui pra sala.")
+        empty = damp("Entrei no escritorio vazio, em reforma, paredes nuas. Fui pra sala.")
+        self.assertGreater(furnished, 0.8)   # mobiliado → seco
+        self.assertLess(empty, 0.2)          # vazio/reforma → eco
+
+    def test_default_room_assumes_furnished(self):
+        # um "quarto" sem pistas já é bem amortecido (não vira caverna)
+        from k_nar.space import default_damping
+        self.assertGreater(default_damping("quarto_pequeno"), 0.6)
+        self.assertLess(default_damping("galpao_vazio"), 0.2)   # galpão ecoa mesmo
+
+    def test_echo_word_forces_reverb(self):
+        from k_nar.narrative import RuleBasedScreenwriter
+        sc = RuleBasedScreenwriter().write(
+            "Entrei na sala cheia de moveis. Minha voz ecoou nas paredes. Fui pro quintal.",
+            lang="pt")
+        m = SceneModel.from_dict(sc["espaco"])
+        self.assertEqual(m.zones["sala"].effective_damping, 0.0)   # "ecoou" → eco intencional
+
+    def test_wet_scaled_by_damping(self):
+        from k_nar.render.renderer import TimelineRenderer
+        r = TimelineRenderer(sr=22050)
+        dry = r._wet_for("sala_grande", damping=0.9)
+        live = r._wet_for("sala_grande", damping=0.0)
+        self.assertLess(dry, live * 0.2)
+
+
 class TestSpacePolicy(unittest.TestCase):
     def test_no_occlusion_is_transparent(self):
         lp, gain = SpacePolicy().resolve(0.0)

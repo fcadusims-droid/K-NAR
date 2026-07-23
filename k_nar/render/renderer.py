@@ -81,7 +81,9 @@ class TimelineRenderer:
         bed = self._combine_tracks(beds, total)
 
         if not spatial and mode == "full" and timeline.ambiance != "seco":
-            bed = dsp.convolution_reverb(bed, ir, wet=self._wet_for(timeline.ambiance))
+            wet = self._wet_for(timeline.ambiance, getattr(timeline, "damping", 0.0))
+            if wet > 0.0:
+                bed = dsp.convolution_reverb(bed, ir, wet=wet)
 
         return self._master(bed, mode)
 
@@ -95,8 +97,11 @@ class TimelineRenderer:
         "galpao_vazio": 0.20, "caverna": 0.24, "catedral": 0.26,
     }
 
-    def _wet_for(self, space: str) -> float:
-        return min(self.reverb_wet, self._SPACE_WET.get(space, 0.16))
+    def _wet_for(self, space: str, damping: float = 0.0) -> float:
+        """Wet do cômodo, REDUZIDO pela absorção (mobília/uso). Um escritório mobiliado
+        (damping alto) fica quase seco; o mesmo espaço vazio/nu (damping baixo) ecoa."""
+        base = min(self.reverb_wet, self._SPACE_WET.get(space, 0.16))
+        return base * (1.0 - max(0.0, min(1.0, damping)))
 
     # ------------------------------------------------------------------ #
     def _ir(self, preset: str) -> np.ndarray:
@@ -112,7 +117,7 @@ class TimelineRenderer:
         ESTENDE o sinal pela cauda — o eco toca depois do evento acabar, dando vida ao
         cômodo (não é cortado no fim da fala). O `wet` é por cômodo (voz limpa em cômodo
         pequeno). `seco`/naive: sem efeito."""
-        wet = self._wet_for(p.space)
+        wet = self._wet_for(p.space, p.damping)
         if mode == "naive" or not p.space or p.space == "seco" or wet <= 0.0:
             return stereo
         ir = self._ir(p.space)

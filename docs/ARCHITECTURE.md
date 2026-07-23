@@ -387,14 +387,25 @@ altos demais. Diagnóstico e correção:
 | "Passos de bota em madeira ≠ chinelo em concreto" | não havia noção de material | `k_nar/material.py::MaterialPolicy`: material (superfície + calçado) → timbre (passa-baixa) + nível. `Screenwriter._material_of` detecta na prosa; o Orquestrador grava na EDL. Vale p/ qualquer foley. |
 | "Uma voz vinda de outro cômodo" | a fonte era sempre o cômodo do POV | `Screenwriter._source_room` detecta "**da** cozinha, ela gritou" (marcador de origem + cômodo ≠ POV) → fonte noutra zona, POV parado → dispara a oclusão. Só vale p/ voz/SFX, não p/ a narração (o narrador não é relocado). |
 
+## Atuação, mobília e voz de alta qualidade — Fase 8 (implementado)
+
+| Peça | Papel |
+|---|---|
+| `k_nar/space/model.py::Zone.damping` + `PRESET_DAMPING` | Separa o TAMANHO do cômodo da sua ABSORÇÃO. Por padrão mobiliado → seco (escritório não vira caverna); vazio/nu → eco. `renderer._wet_for(space, damping)` reduz o wet por `1−damping`. O Screenwriter lê móveis vs. vazio (`lexicons.furnishing/emptiness/echo_words`) por zona e global. |
+| `k_nar/emotion.py::EmotionPolicy` | Matriz EMOÇÃO → gesto vocal (arousal, ritmo, pitch, variância, ganho, pausas), irmã da `ProsodyPolicy`. `resolve(emo, intensidade)` escala o gesto. Composta em `ProsodyPolicy.resolve` (o emocional soma à tensão) e nas pausas do Orquestrador. |
+| `k_nar/narrative/acting.py` | Inferência de emoção por regras: pontuação, léxico de emoção, verbo de fala, `SceneMood` (termômetro que sobe no suspense e decai), reação à linha anterior, e `Persona` (temperamento do personagem, dos descritores). O `RuleBasedDirector` mantém o mood/reação por história e grava emoção+intensidade no `voz`. |
+| `k_nar/tts/xtts.py::XTTSBackend` | Voz XTTS-v2 (opt-in, `--voz xtts`) atrás do mesmo `TTSBackend`: locutor de estúdio por personagem (gênero, do casting) + `EmotionPolicy` (emoção→speed, pitch por reamostragem). Imports tardios (torch/coqui); o core segue stdlib. |
+| `scripts/package_audio.py` | Entrega sob limite de tamanho: Opus (metade do MP3) e divisão em partes no silêncio. Zip/rar não serve (áudio já comprimido). |
+| `story.strip_markdown` | Agora remove comentários HTML `<!-- -->` (são notas, não prosa — não podem ser lidos). |
+
 ## O que ainda NÃO existe (próximos passos)
 
 1. **Música** com fonte dedicada (a trilha `musica` já é ducada e tem nível no
    `MixPolicy`; falta um `MusicEvent`/gerador — uma trilha via `LibrarySfxBackend` já roda).
-2. **Crossfade equal-power em `sobreposicao` longa**; **sincronia fina SFX↔verbo** via
-   forced alignment sobre a narração; calibração do `LlamaDirector`; `NeuralSfxBackend`.
-3. **Voz neural de qualidade superior** (Piper medium é o teto atual; modelos "high" ou
-   outro motor melhorariam o timbre bruto — o processamento já não abafa mais a voz).
+2. **`LlamaDirector` para emoção fina** (o rótulo de emoção sairia de um LLM em vez de
+   regras — o contrato é o mesmo; o baseline por regras já atua bem).
+3. **Crossfade equal-power em `sobreposicao` longa**; **sincronia fina SFX↔verbo** via
+   forced alignment sobre a narração; `NeuralSfxBackend`.
 
 ## Visão: motor de áudio narrativo completo (roadmap)
 

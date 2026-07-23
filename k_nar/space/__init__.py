@@ -5,7 +5,9 @@ distância e oclusão) de um GRAFO de zonas, em vez de rótulos escolhidos à m�
 dado puro (stdlib); o Orquestrador grava o resultado na EDL e o renderer só aplica.
 """
 
-from k_nar.space.model import SceneModel, SpatialCue, Zone
+from k_nar.space.model import (PRESET_DAMPING, SceneModel, SpatialCue, Zone,
+                               default_damping)
 from k_nar.space.policy import SpacePolicy
 
-__all__ = ["SceneModel", "SpatialCue", "Zone", "SpacePolicy"]
+__all__ = ["SceneModel", "SpatialCue", "Zone", "SpacePolicy", "PRESET_DAMPING",
+           "default_damping"]

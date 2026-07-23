@@ -105,8 +105,10 @@ class RuleBasedScreenwriter:
         source_of_event: dict[str, str] = {}     # event_id -> zona da FONTE (se != ouvinte)
         zone_links: set = set()                  # pares de zonas que o POV percorreu (portas)
         zone_order: list[str] = []               # ordem de visita (a 1ª é a zona padrão)
+        zone_damping: dict[str, float] = {}      # zona -> absorção (mobiliado=seco; vazio=eco)
         current_zone: str | None = None
         pending_source: str | None = None        # "da cozinha, ela gritou" (fonte noutro cômodo)
+        g_furn = g_empt = g_echo = 0             # contadores GLOBAIS (amortecimento não-espacial)
 
         def _enter(el_id: str, kind: str = "narracao") -> None:
             if current_zone:
@@ -139,6 +141,21 @@ class RuleBasedScreenwriter:
                     current_zone = zid
                     if zid not in zone_order:
                         zone_order.append(zid)
+
+            # MOBÍLIA/VAZIO: cômodo mobiliado/em uso é seco; vazio/nu ecoa. Ajusta a
+            # absorção da zona ATUAL (e conta global p/ o caso não-espacial).
+            words = {_norm(w) for w in _WORD_RE.findall(plain)}
+            f, e, ec = (len(words & lex.furnishing), len(words & lex.emptiness),
+                        len(words & lex.echo_words))
+            g_furn += f; g_empt += e; g_echo += ec
+            if current_zone and (f or e or ec):
+                from k_nar.space import default_damping
+                base = zone_damping.get(
+                    current_zone, default_damping(zone_space.get(current_zone, "seco")))
+                if ec:                       # a prosa DIZ que ecoou → eco é intencional
+                    base = 0.0
+                base = base + 0.10 * f - 0.35 * e
+                zone_damping[current_zone] = max(0.0, min(0.92, base))
 
             ids = _MASK_RE.findall(sent)
             if ids:
@@ -219,11 +236,19 @@ class RuleBasedScreenwriter:
         out: dict[str, Any] = {"cena_id": scene_id, "ambientacao": final_ambiance,
                                "elementos": beds + elementos, "acoes": acoes}
 
+        # Amortecimento GLOBAL (caso NÃO-espacial): mobília/uso do espaço único da cena.
+        # 0 = eco cheio (retrocompat); a prosa "ecoou" força 0; mobília aumenta o seco.
+        if g_echo:
+            out["amortecimento"] = 0.0
+        elif g_furn or g_empt:
+            out["amortecimento"] = max(0.0, min(0.85, 0.12 * g_furn - 0.20 * g_empt))
+
         # "Set virtual" de zonas: só emite se há >=2 cômodos (senão espacializar não muda
         # nada). O pipeline reconstrói o SceneModel disto e liga o modo espacial.
         if len(zone_space) >= 2 and zone_of_event:
             out["espaco"] = {
-                "zonas": [{"id": zid, "space": preset} for zid, preset in zone_space.items()],
+                "zonas": [{"id": zid, "space": preset, "damping": zone_damping.get(zid)}
+                          for zid, preset in zone_space.items()],
                 "ligacoes": [sorted(pair) for pair in zone_links],
                 "ouvinte": dict(zone_of_event),
                 # fonte = ouvinte, salvo quando o som "vem de outro cômodo" (oclusão).

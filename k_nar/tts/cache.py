@@ -42,6 +42,9 @@ class CachingTTS:
             "rate": round(float(event.voice.rate), 4),
             "pitch": round(float(event.voice.pitch), 4),
             "tensao": str(event.voice.tension),
+            # a EMOÇÃO muda a síntese (ritmo/pitch/variância): entra na chave do cache.
+            "emocao": getattr(event.voice, "emotion", "neutro"),
+            "intensidade": round(float(getattr(event.voice, "intensity", 0.0)), 3),
         }
         raw = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
         return hashlib.sha256(raw).hexdigest()[:24]

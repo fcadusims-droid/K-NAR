@@ -80,6 +80,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
 def strip_markdown(text: str) -> str:
     """Remove sintaxe Markdown, preservando a prosa (para não ser 'lida' como ruído)."""
     out = text
+    out = re.sub(r"<!--.*?-->", " ", out, flags=re.DOTALL)          # comentários HTML (notas)
     out = re.sub(r"```.*?```", " ", out, flags=re.DOTALL)          # blocos de código
     out = re.sub(r"`([^`]*)`", r"\1", out)                          # código inline
     out = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", out)                 # imagens

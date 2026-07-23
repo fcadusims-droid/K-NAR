@@ -103,6 +103,27 @@ def _build_profiles(scene, story, lang_profile, models_dir: str):
     return profiles, person, protagonist
 
 
+def _xtts_backend(scene, story, prosody, person, track_of):
+    """Backend XTTS-v2 (opt-in): voz neural de alta qualidade. Voz por personagem via
+    LOCUTOR de estúdio (por gênero, do casting); narração casa com a voz de 1ª pessoa.
+    Trim + cache (XTTS é lento; o cache evita re-sintetizar ao iterar)."""
+    from k_nar.casting import infer_traits
+    from k_nar.render.trim import TrimmedTTS
+    from k_nar.tts.cache import CachingTTS
+    from k_nar.tts.xtts import XTTSBackend, assign_speakers
+
+    speakers_set = sorted({ev.character for ev in scene.events
+                           if track_of(ev) == "dialogo" and getattr(ev, "character", "")})
+    traits = infer_traits(speakers_set, story.prose, story.lang)
+    spk = assign_speakers(traits)
+    # 1ª pessoa: a narração é o protagonista → mesma voz das falas dele (ou __EU__).
+    if person == "primeira":
+        prot = story.protagonist.strip()
+        spk["Narrador"] = spk.get(prot) or spk.get("__EU__") or spk.get("Narrador")
+    xtts = XTTSBackend(language=story.lang, speakers=spk, prosody=prosody)
+    return CachingTTS(TrimmedTTS(xtts), cache_dir=".knar_cache_xtts"), 24000, "xtts"
+
+
 def _sfx_backend(sr: int, sounds_dir: str | None):
     """Biblioteca de samples reais se houver manifesto; senão, síntese procedural."""
     from k_nar.sfx import ProceduralSfxBackend
@@ -119,12 +140,15 @@ def _sfx_backend(sr: int, sounds_dir: str | None):
 
 def render_story(story: Story, *, models_dir: str = "models/piper",
                  sounds_dir: str | None = None, mode: str = "full",
-                 spatialize: bool = True) -> RenderResult:
+                 spatialize: bool = True, voice_engine: str = "piper") -> RenderResult:
     """Roda a cadeia completa Screenwriter → Director → Orquestrador → Renderer.
 
     `spatialize`: liga o "set virtual" de zonas (Nível 1) quando o Screenwriter detecta
     >=2 cômodos — o reverb segue o POV pela casa e vozes de outros cômodos soam
-    abafadas (oclusão). Sem >=2 cômodos, é no-op (idêntico ao modo clássico)."""
+    abafadas (oclusão). Sem >=2 cômodos, é no-op (idêntico ao modo clássico).
+
+    `voice_engine`: "piper" (rápido, padrão) ou "xtts" (voz neural de alta qualidade,
+    LENTA — segundos por frase; opt-in, requer coqui-tts + torch)."""
     from k_nar import (Orquestrador, ProsodyPolicy, Scene, TimingPolicy, check_mix,
                        check_timeline)
     from k_nar.director import RuleBasedDirector
@@ -136,10 +160,15 @@ def render_story(story: Story, *, models_dir: str = "models/piper",
     lang_profile = get_language(story.lang)
 
     # PASSAGEM 0 → 1
+    from k_nar.narrative.acting import personas_from_prose
     script = RuleBasedScreenwriter().write(
         story.prose, scene_id=story.scene_id, ambiance=story.ambiance,
         narrator=story.narrator, lang=story.lang)
-    scene_dict = RuleBasedDirector().direct(script)
+    # temperamento de cada personagem (o veterano calmo × o novato nervoso) → atuação.
+    speakers = {e.get("personagem") for e in script.get("elementos", [])
+                if e.get("tipo") == "fala"}
+    personas = personas_from_prose(speakers, story.prose, story.lang)
+    scene_dict = RuleBasedDirector(personas=personas, lang=story.lang).direct(script)
     scene = Scene.from_dict(scene_dict)
 
     # "Set virtual" de zonas (Nível 1): reconstruído do roteiro se o Screenwriter achou
@@ -154,11 +183,15 @@ def render_story(story: Story, *, models_dir: str = "models/piper",
     # PASSAGENS 2-3
     prosody = ProsodyPolicy()
     policy = TimingPolicy()
-    voice, sr, kind = _voice_backend(lang_profile, prosody, models_dir, profiles)
-    sfxb = _sfx_backend(sr, sounds_dir)
 
     def _track(ev):
         return getattr(getattr(ev, "track", None), "value", "dialogo")
+
+    if voice_engine == "xtts":
+        voice, sr, kind = _xtts_backend(scene, story, prosody, person, _track)
+    else:
+        voice, sr, kind = _voice_backend(lang_profile, prosody, models_dir, profiles)
+    sfxb = _sfx_backend(sr, sounds_dir)
 
     speech = [ev for ev in scene.events if _track(ev) not in _SOUND_TRACKS]
     sound = [ev for ev in scene.events if _track(ev) in _SOUND_TRACKS]
@@ -170,7 +203,8 @@ def render_story(story: Story, *, models_dir: str = "models/piper",
     # 1ª pessoa: a narração é o protagonista DENTRO da cena → espacializada como fonte.
     timeline = Orquestrador(
         voice, policy, prosody=prosody, scene_model=scene_model,
-        spatial_narration=(person == "primeira")).render_scene(scene, clips=clips)
+        spatial_narration=(person == "primeira"),
+        scene_damping=float(script.get("amortecimento", 0.0))).render_scene(scene, clips=clips)
 
     # PASSAGEM 4 (render + QA)
     samples = {eid: c.samples for eid, c in clips.items()}

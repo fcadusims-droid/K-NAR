@@ -118,6 +118,12 @@ def validate_scene(d: Any, *, allow_numeric_tension: bool = True) -> None:
                     errs.append(f"{p}.voz.tensao: {tensao!r} nao esta em {sorted(labels)}")
             _num(errs, f"{p}.voz.velocidade", voz.get("velocidade"), 0.3, 2.5)
             _num(errs, f"{p}.voz.tom", voz.get("tom"), -1.0, 1.0)
+            # ATUAÇÃO (opcional): emoção (rótulo) + intensidade 0..1
+            if voz.get("intensidade") is not None:
+                _num(errs, f"{p}.voz.intensidade", voz.get("intensidade"), 0.0, 1.0)
+            emo = voz.get("emocao")
+            if emo is not None and not isinstance(emo, str):
+                errs.append(f"{p}.voz.emocao: deve ser texto")
 
         # entrada
         entrada = ev.get("entrada", {})

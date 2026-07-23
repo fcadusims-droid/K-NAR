@@ -69,6 +69,10 @@ class VoiceParams:
     tension: Any = 0.0   # 0.0 calmo -> 1.0 pânico/fúria  (float ou rótulo)
     rate: float = 1.0    # multiplicador de velocidade (1.0 = neutro)
     pitch: float = 0.0   # desvio relativo de tom (-1.0 .. +1.0), 0 = neutro
+    # ATUAÇÃO: a emoção da linha (rótulo) + intensidade (0..1). A EmotionPolicy traduz
+    # em ritmo/pitch/variância/ganho/pausa por cima da tensão. "neutro" = sem gesto.
+    emotion: str = "neutro"
+    intensity: float = 0.0
 
     @classmethod
     def from_dict(cls, d: dict[str, Any] | None) -> "VoiceParams":
@@ -77,6 +81,8 @@ class VoiceParams:
             tension=d.get("tensao", d.get("tension", 0.0)),
             rate=_as_float(d.get("velocidade", d.get("rate", 1.0)), 1.0),
             pitch=_as_float(d.get("tom", d.get("pitch", 0.0)), 0.0),
+            emotion=str(d.get("emocao", d.get("emotion", "neutro"))).strip().lower(),
+            intensity=_as_float(d.get("intensidade", d.get("intensity", 0.0)), 0.0),
         )
 
 

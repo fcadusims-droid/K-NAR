@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from k_nar.emotion import EmotionPolicy
 from k_nar.models import TENSION_LABELS
 
 
@@ -64,19 +65,27 @@ class ProsodyPolicy:
     # partir de um único modelo mono-locutor (não substitui vozes reais, mas ajuda).
     character_pitch: dict[str, float] = field(default_factory=dict)
     character_pitch_spread: float = 2.0  # semitons de separação por índice de personagem
+    # matriz de ATUAÇÃO: a emoção da linha vira um "gesto vocal" por cima da tensão.
+    emotion_policy: EmotionPolicy = field(default_factory=EmotionPolicy)
 
     _char_order: dict[str, int] = field(default_factory=dict, repr=False)
 
     # ------------------------------------------------------------------ #
-    def resolve(self, tension: float, rate: float = 1.0, character: str = "") -> Prosody:
-        t = _clamp(float(tension), 0.0, 1.0)
+    def resolve(self, tension: float, rate: float = 1.0, character: str = "",
+                emotion: str = "neutro", intensity: float = 0.0) -> Prosody:
+        # A emoção implica um PISO de excitação (uma fala de urgência já entra tensa).
+        shift = self.emotion_policy.resolve(emotion, intensity)
+        t = _clamp(max(float(tension), shift.arousal), 0.0, 1.0)
         char_pitch = self._character_pitch(character)
+        # base pela tensão; a emoção soma o "gesto" (ritmo/pitch/variância/ganho).
+        length_scale = _lerp(self.length_scale_calm, self.length_scale_tense, t) / max(rate, 0.1)
+        length_scale /= max(shift.rate_mult, 0.1)   # rate_mult>1 = fala mais rápida
         return Prosody(
-            length_scale=_lerp(self.length_scale_calm, self.length_scale_tense, t) / max(rate, 0.1),
-            noise_scale=_lerp(self.noise_scale_calm, self.noise_scale_tense, t),
-            noise_w=_lerp(self.noise_w_calm, self.noise_w_tense, t),
-            pitch_semitones=_lerp(self.pitch_calm, self.pitch_tense, t) + char_pitch,
-            gain_db=_lerp(self.gain_calm_db, self.gain_tense_db, t),
+            length_scale=length_scale,
+            noise_scale=_lerp(self.noise_scale_calm, self.noise_scale_tense, t) * shift.variance_mult,
+            noise_w=_lerp(self.noise_w_calm, self.noise_w_tense, t) * shift.variance_mult,
+            pitch_semitones=_lerp(self.pitch_calm, self.pitch_tense, t) + char_pitch + shift.pitch_semitones,
+            gain_db=_lerp(self.gain_calm_db, self.gain_tense_db, t) + shift.gain_db,
         )
 
     def _character_pitch(self, character: str) -> float:

@@ -40,6 +40,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="primeira | terceira | auto (sobrescreve o front-matter)")
     p.add_argument("--sem-espaco", "--no-spatial", dest="espaco", action="store_false",
                    default=True, help="desliga o 'set virtual' de zonas (reverb por cômodo)")
+    p.add_argument("--voz", "--voice", dest="voz", default="piper",
+                   choices=["piper", "xtts"],
+                   help="motor de voz: piper (rápido) | xtts (alta qualidade, lento)")
     p.add_argument("--quiet", action="store_true", help="não imprime o resumo")
     return p
 
@@ -72,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         res = render_story(story, models_dir=args.models, sounds_dir=sons,
-                           spatialize=args.espaco)
+                           spatialize=args.espaco, voice_engine=args.voz)
     except ValueError as e:
         # ex.: história sem nenhuma fala/narração/som após a segmentação
         print(f"erro: não consegui montar a cena ({e}). A história tem conteúdo?",

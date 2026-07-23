@@ -1,127 +1,124 @@
 # Template de história — como escrever para o K-NAR
 
-O K-NAR transforma uma **história em texto** num audiobook dramatizado (vozes,
-efeitos e ambiência). Você **não precisa** de um formato rígido: um `.md` ou `.txt`
-só com a sua prosa já funciona. Mas seguir estas convenções melhora o resultado.
+O K-NAR transforma uma **história em texto** num audiobook dramatizado (vozes que
+**atuam**, efeitos, ambiência e espaço acústico). Um `.md`/`.txt` só com a sua prosa
+já funciona — mas seguir estas convenções faz o motor interpretar **100%** do que
+você quis. As regras abaixo foram **testadas** no próprio K-NAR: cada "✅ faça assim"
+é um padrão que o parser acerta; cada "⚠️ evite" é um caso que ele erra.
 
 ## O arquivo
 
-Um `.md` (ou `.txt`) com um **front-matter** opcional no topo (entre `---`) e a
-história em prosa embaixo:
+Front-matter opcional (entre `---`) no topo + a prosa embaixo:
 
 ```markdown
 ---
 titulo: A Ponte de Comando
 idioma: pt            # pt | en | es
-narrador: sim         # sim / nao  (com ou sem narrador)
+narrador: sim         # sim / nao  (nao = radiodrama, só vozes + sons)
 pessoa: terceira      # terceira | primeira | auto  (quem conta a história)
-protagonista:         # em 1ª pessoa: o nome de quem narra (opcional)
-ambientacao: cockpit_metalico_eco
+protagonista:         # em 1ª pessoa: o nome de quem narra
+ambientacao: seco     # deixe 'seco' e deixe os cômodos definirem o espaço
 ---
 
-A nave cortava o vazio, e o zumbido dos motores enchia a ponte.
-Uma porta blindada rangeu. "Tem alguém aí?", perguntou a Comandante, tensa.
-Ninguém respondeu. Então um tiro disparou nas sombras.
-"Todos em posição!", ela gritou.
+A nave cortava o vazio. "Tem alguém aí?", perguntou a Comandante, tensa.
 ```
 
-Todos os campos do front-matter são opcionais (defaults: `pt`, com narrador,
-`pessoa: auto`, ambiência `seco`). Sem front-matter, é só a prosa.
+Defaults: `pt`, com narrador, `pessoa: auto`, ambiência `seco`. **Dois modelos
+prontos:** `examples/template_terceira_pessoa.md` e `examples/template_primeira_pessoa.md`.
 
-> **Dois modelos prontos:** `examples/template_terceira_pessoa.md` (narrador conta) e
-> `examples/template_primeira_pessoa.md` (o protagonista conta). Copie o que combina
-> com a sua história.
+## Regra de ouro (as 3 que mais importam)
 
-## Como o K-NAR lê a sua história
+1. **Diálogo:** entre `"aspas"` **ou** travessão `— Fala —`, e **diga o nome de quem
+   fala** na atribuição. ✅ `"Quem está aí?", perguntou Herman.` (ou `Herman perguntou`).
+   ⚠️ **Evite atribuir só por pronome** — `perguntou ela` não vira um personagem
+   nomeado (a voz sai genérica). Nomeie ao menos na primeira fala da troca.
+2. **Um cômodo por frase** quando o personagem anda pela casa. ✅ `Entrou na cozinha.
+   Fez café. Depois foi para a sala.` → o eco **segue** o POV (cozinha → sala).
+   ⚠️ `Andou pelo corredor até a sala` (dois cômodos na mesma frase) conta só o
+   **destino** (a sala) — o corredor não vira um cômodo à parte.
+3. **Descreva a atuação:** o verbo de fala e as palavras de emoção **dirigem a voz**.
+   ✅ `"CORRE!", gritou, apavorado.` → urgência/medo, alto e rápido.
+   `"Calma…", murmurou, cansado.` → baixo, lento, contido.
 
-Cada frase vira um de quatro tipos, automaticamente:
+## Como o K-NAR lê cada frase
 
 | Você escreve | Vira |
 |---|---|
-| `"..."` (entre aspas) | **DIÁLOGO** — uma fala de personagem |
-| `perguntou Ana`, `gritou o Capitão` | o **locutor** e a emoção da fala anterior |
-| `Passos numa poça d'água.` (frase curta de som) | **EFEITO SONORO** — o motor cria o som, o narrador **não** lê |
-| `A floresta noturna zumbia.` (cenário) | **AMBIÊNCIA** — uma cama de fundo pela cena toda |
-| o resto da prosa | **NARRAÇÃO** — lida pelo narrador (se houver) |
+| `"..."` ou `— ... —` | **DIÁLOGO** (com o locutor da atribuição) |
+| `perguntou Ana`, `gritou o Capitão` | o **locutor** + a **emoção** da fala |
+| `Um trovão ecoou.` (frase curta de som, sem nome) | **EFEITO** — o narrador **não** lê |
+| `Ana ouviu a porta ranger.` (som + nome de pessoa) | **NARRAÇÃO + efeito** juntos |
+| `Os grilos cantavam.` / `Chovia.` (cenário contínuo) | **AMBIÊNCIA** (cama de fundo) |
+| o resto da prosa | **NARRAÇÃO** (se `narrador: sim`) |
 
-### Quem conta: 3ª pessoa vs 1ª pessoa
+## Atuação — faça os personagens *performar*
 
-- **3ª pessoa** (`pessoa: terceira`) — um **narrador de fora** conta ("*ele* entrou…").
-  No áudio o narrador tem voz própria e é **seco/íntimo**: não está na cena, está te
-  contando. É o padrão.
-- **1ª pessoa** (`pessoa: primeira`) — o **protagonista** conta ("*eu* entrei…"). A
-  narração usa a **mesma voz** dele (diga `protagonista: Nome` para casar com as falas)
-  e, por ele estar **dentro da cena**, ganha o **eco do cômodo** onde ele está — você
-  ouve pelos ouvidos dele.
-- `pessoa: auto` (padrão) — o K-NAR detecta contando "eu/meu" vs "ele/ela" na narração.
+O K-NAR infere a **emoção de cada linha** e a atua (ritmo, tom, energia, tremor,
+pausa). Dê os sinais:
 
-### Vozes por aparência (elenco automático)
+- **Verbo de fala:** `gritou`/`berrou` (raiva), `sussurrou`/`murmurou` (suspense),
+  `resmungou` (cansaço), `implorou` (súplica), `ordenou` (comando), `exclamou` (surpresa).
+- **Palavras de emoção** perto da fala: *apavorado, furioso, triste, aliviado, feliz*.
+- **Pontuação:** `!` = urgência/força; `...` = hesitação/suspense; `?` = pergunta;
+  **MAIÚSCULAS** = grito.
+- **Clima da cena:** o motor mantém um "termômetro" — uma sequência tensa
+  (silêncio estranho, ameaça) **contamina** as falas seguintes com suspense, e uma
+  fala carregada empurra a reação da próxima. Você não precisa marcar linha a linha:
+  construa a tensão na prosa que o K-NAR acompanha.
 
-O K-NAR **escolhe a voz de cada personagem** pela descrição na prosa — não só
-"homem/mulher", mas **idade, gênero e timbre**. Descreva o personagem quando ele
-aparece: *"o **velho** de voz **rouca**"* → voz grave e lenta; *"a **menina**"* → voz
-aguda e ágil; *"a **jovem**"*, *"o **senhor**"*, etc. Sem descritor, ele recebe uma voz
-adulta neutra (ainda distinta das outras). O gênero vem dos **descritores**, nunca de
-adivinhar pelo nome.
+## Vozes por personagem (elenco automático)
 
-### Distância e lugar (o "set virtual" de zonas)
+Descreva **idade, gênero e timbre** na primeira aparição — o K-NAR escolhe a voz:
+✅ *"o **velho** Aurélio, de voz **rouca**"* → grave e lento; *"a **menina**"* → aguda
+e ágil; *"o rapaz **nervoso**"* → mais agitado (temperamento também vira atuação). O
+gênero vem dos **descritores**, nunca do nome. Sem descrição → voz neutra distinta.
 
-O K-NAR entende **de onde** o som vem e monta um **set acústico** da cena:
+## Espaço acústico (o "set virtual")
 
-- **Distância:** "tiros **ao longe**" soam baixos e abafados (o ar come os agudos) e
-  mais centrais; "um tiro **à queima-roupa**" soa alto, seco e largo. Palavras como
-  *ao longe / distante / no horizonte* e *perto / ao lado / queima-roupa* controlam isso.
-- **Cômodos (zonas):** mencione os lugares por onde a cena passa — *cozinha, sala,
-  corredor, porão, quintal…* — e o K-NAR monta um **mapa da casa**. O **eco segue o
-  personagem** de cômodo em cômodo (a sala grande ecoa, o quintal é aberto e seco).
-  Numa frase com dois cômodos (*"andei pelo corredor **até a sala**"*), o POV termina
-  no **destino** (a sala). Isso liga sozinho quando há **2+ cômodos** (`--sem-espaco` desliga).
-- **Voz vinda de outro cômodo:** escreva *"**da** cozinha, ela gritou"* (com **da/do**)
-  enquanto o personagem está noutro cômodo — a voz soa **abafada, atravessando a parede**.
-  Quando o personagem entra naquele cômodo, a mesma voz fica limpa.
-- **Material do chão/passos:** *"passos de **bota** no **assoalho de madeira**"* soa
-  diferente de *"**chinelo** no **concreto**"* — o K-NAR ajusta o timbre e o volume pelo
-  material (bota soca; chinelo/tapete/descalço abafam e somem). Vale p/ qualquer som.
-- **Espaço fixo:** para uma cena única, fixe o eco no front-matter:
-  `ambientacao: galpao_vazio` (ou *catedral, caverna, túnel, banheiro…*).
+- **Cômodos:** nomeie os lugares (um por frase, ver regra 2). O eco **segue** o POV;
+  a sala grande ecoa, o quintal é aberto e seco.
+- **Mobiliado × vazio:** por padrão o cômodo é **mobiliado e seco** (nada de eco de
+  caverna num escritório). Para ecoar, diga que está **vazio / em reforma / paredes
+  nuas**; para reforçar o "seco", cite os móveis (*mesa, cadeira, estante, tapete*).
+  Se você escrever que a voz *"ecoou"*, o eco é respeitado.
+- **Voz de outro cômodo:** *"**da** cozinha, ela gritou"* (com **da/do**) → a voz soa
+  abafada, atravessando a parede, enquanto o POV está noutro cômodo.
+- **Distância de um som:** *"tiros **ao longe**"* (baixo e abafado) × *"à
+  queima-roupa"* (alto e seco).
+- **Material do passo/impacto:** *"passos de **bota** no **assoalho de madeira**"* ≠
+  *"**chinelo** no **concreto**"* — muda timbre e volume.
+- **Espaço fixo** (cena única): `ambientacao: galpao_vazio` (ou *catedral, caverna,
+  túnel, banheiro*).
 
-### Dicas para um bom resultado
+## Sons que o K-NAR reconhece
 
-- **Diálogo entre aspas** `"..."` **ou travessão** `— Fala — disse Fulano` (padrão
-  literário em PT). O verbo (`gritou`/`sussurrou`) ajusta a atuação (grito vs. sussurro).
-- **Som puro numa frase curta e sem nome de pessoa** vira efeito e não é narrado —
-  ex.: `Um trovão ecoou.`, `Passos na poça.`. Se você mencionar um personagem
-  (`Ana ouviu a porta ranger`), a frase é narrada **e** o efeito toca.
-- **Cenário** (floresta, chuva, vento, motor, cidade, mar…) liga a ambiência.
-- **Sem narrador** (`narrador: nao`): a história é contada só por vozes + sons —
-  modo radiodrama. Aí evite frases de narração pura, prefira diálogo e som.
+Não é lista fechada (o resto vira narração) — os mais comuns por idioma:
 
-## Palavras que o K-NAR reconhece como som
-
-Não é uma lista fechada — são as mais comuns por idioma (o resto vira narração):
-
-- **Efeitos (pontuais):** tiro/disparo, explosão, porta que range, passos (e `poça`
-  → splash), trovão, vidro que quebra, batida, sirene, alarme.
-  *(EN: gunshot, explosion, creaked, footsteps/puddle, thunder…  ES: disparo,
-  explosión, crujió, pasos/charco, trueno…)*
-- **Ambiência (contínua):** floresta, chuva, vento, motor/nave, cidade, multidão,
-  mar/ondas. *(EN: forest, rain, wind, engine/ship, city, crowd, ocean.  ES:
-  bosque, lluvia, viento, motor, ciudad, multitud, mar.)*
+- **Efeitos:** tiro/disparo, explosão, porta que range, passos (+ `poça` → splash),
+  trovão, vidro, batida, sirene, alarme, sino, buzina, teclado, latido, etc.
+- **Ambiência:** floresta, grilos, chuva, vento, motor/nave, cidade, multidão, mar, fogo.
 
 ## Gerar o áudio
 
 ```bash
-# baixe as vozes do idioma (uma vez)
-scripts/download_lang.sh pt        # ou en / es
+scripts/download_lang.sh pt            # vozes do idioma (uma vez): pt | en | es
+python scripts/download_sfx.py         # biblioteca de efeitos reais (ESC-50, CC0)
 
-# baixe a biblioteca de EFEITOS SONOROS reais (ESC-50, CC0) — uma vez
-python scripts/download_sfx.py     # (--free-only p/ só CC0/CC-BY; senão, síntese)
-
-# gere o audiobook (usa sounds/ automaticamente se existir)
-python -m k_nar minha_historia.md
-python -m k_nar minha_historia.md --sem-narrador     # radiodrama
-python -m k_nar minha_historia.md --idioma en        # sobrescreve o front-matter
+python -m k_nar minha_historia.md                 # audiobook (usa sounds/ se existir)
+python -m k_nar minha_historia.md --sem-narrador  # radiodrama (só vozes + sons)
+python -m k_nar minha_historia.md --pessoa primeira
+python -m k_nar minha_historia.md --voz xtts      # voz neural de ALTA qualidade (lenta)
 ```
 
-Ou use a **interface web** (GitHub Pages) para enviar a história e receber o áudio
-sem instalar nada — veja o README.
+`--voz xtts` usa o **XTTS-v2** (timbre muito melhor que o Piper padrão, porém lento —
+segundos por frase; requer `coqui-tts` + `torch`). Para ouvir um teste rápido, use um
+capítulo curto. Ou use a **interface web** (GitHub Pages) — veja o README.
+
+## Checklist do documento perfeito
+
+- [ ] Diálogo entre `"aspas"`/travessão, **com o nome** do locutor.
+- [ ] Um **cômodo por frase** ao andar; diga se está **vazio** (senão é seco).
+- [ ] **Verbos de fala + emoção** ricos (gritou/sussurrou/apavorado/cansado…).
+- [ ] Cada personagem **descrito** (idade/gênero/timbre) na 1ª aparição.
+- [ ] `pessoa:` e, em 1ª pessoa, `protagonista:` preenchidos.
+- [ ] Sons pontuais em frases curtas; cenário contínuo para ambiência.
