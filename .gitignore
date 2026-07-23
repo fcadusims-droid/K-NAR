@@ -21,3 +21,5 @@ models/**
 .DS_Store
 sounds/
 *.mp3
+scratch_ab/
+*.mp3

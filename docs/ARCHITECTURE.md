@@ -343,13 +343,44 @@ pico — sons densos (grilos, motor) não ficam altos demais; e o ducking é mai
 (`duck_db=-16`). Resultado medido: a ambiência fica ~-21 dB abaixo da narração
 (desducada) e ~-24 dB sob a fala — um bed de fundo de verdade.
 
+## "Set virtual" acústico por ZONAS — Nível 1 (implementado)
+
+A ideia do usuário: o motor construir um **modelo da cena** (cômodos, quem está onde,
+por onde o POV anda) e **derivar** a acústica dele — como áudio de jogo (o som bate na
+parede e volta). A decisão de projeto foi a versão por **ZONAS**, não física de raios:
+em estéreo, as reflexões colapsam e o ganho fica quase nulo perto do custo/fragilidade
+de autorar geometria. O que o ouvido percebe é "em que cômodo estou" e "isso está no
+meu cômodo ou atrás da parede" — e é isso que o modelo por zonas captura, barato e
+reaproveitando o render que já existe.
+
+| Peça | Papel |
+|---|---|
+| `k_nar/space/model.py::SceneModel` | Grafo de zonas (`Zone.space` = preset de reverb) + adjacência (portas) + `source_zone`/`listener_zone` por evento. `cue(id)` resolve um `SpatialCue`: reverb do cômodo do **ouvinte**, distância (mesma zona=perto; vizinha=longe; sem caminho=muito_longe via BFS) e **oclusão** (0/0.55/0.9). `is_trivial()` (≤1 zona) → no-op. Dado puro (stdlib), serializa p/ atravessar o Screenwriter. |
+| `k_nar/space/policy.py::SpacePolicy` | Matriz OCLUSÃO → acústica: a parede é um passa-baixa físico. Interpola o corte (`open`→`wall_lowpass_hz`) e a atenuação (`wall_gain_db`) pela oclusão. |
+| `orchestrator._apply_spatial` | Em modo espacial, grava na EDL o `space` (reverb do cômodo), a distância (via `ProximityPolicy`) e a oclusão (via `SpacePolicy`) — p/ diálogo e SFX; e p/ narração só em 1ª pessoa (`spatial_narration`). O narrador onisciente (3ª pessoa) fica **fora** do palco. |
+| `renderer._reverb` | **Reverb POR-EVENTO**: convolve cada evento com o IR do seu cômodo e **estende a cauda** (o eco toca depois da fala). No modo espacial NÃO há reverb global — cada evento traz o seu, então o eco **segue o POV** pela casa. |
+| `Screenwriter._zone_of` + `lexicons.zone_triggers` | Detecta cômodos na prosa ("cozinha"→quarto_pequeno, "sala"→sala_grande, "quintal"→seco) e monta o `SceneModel` (o POV "anda": adjacência na ordem da caminhada). Emite `espaco` no roteiro; o pipeline reconstrói. Só com 2+ cômodos. |
+
+**A/B REAL** (`scripts/ab_spatial.py`, Piper + ESC-50): a voz do cômodo ao lado perde
+~95% dos agudos e ~11 dB (oclusão); a cauda de reverb varia ~6× mais por cômodo (o
+quintal aberto fica seco, o salão ecoa) vs. o modo flat (um reverb só). Sem regressão
+de clipping/QA → **ligado por padrão** com 2+ cômodos. Ver `examples/casa_de_madeira.md`.
+
+## Elenco de vozes por aparência + pessoa narrativa (implementado)
+
+| Peça | Papel |
+|---|---|
+| `k_nar/casting.py` | Infere `Traits` (gênero/idade/timbre) de cada personagem dos **descritores** na prosa (uma frase com um só personagem credita seus traços — evita cross-atribuição). `voice_for` mapeia traço → `VoiceProfile` (pitch/ritmo): velho grave e lento, criança agudo e ágil. Gênero vem do texto, **nunca do nome** (não "misgenera"); sem descritor → voz neutra + jitter por nome p/ distinguir. |
+| `k_nar/narrative/person.py` | `detect_person` conta pronomes de 1ª vs 3ª pessoa **na narração** (o diálogo sempre tem "eu"). 3ª = narrador onisciente **seco**; 1ª = a narração É o protagonista → mesma voz das falas dele (`protagonista`) e **dentro da cena** (`spatial_narration`, leva o reverb do cômodo). |
+| `pipeline._build_profiles` | Junta o elenco + o narrador (por pessoa) num `dict[personagem→VoiceProfile]` p/ o `MultiVoiceTTSBackend`. Front-matter `pessoa`/`protagonista`; CLI `--pessoa`/`--sem-espaco`. Templates: `examples/template_{primeira,terceira}_pessoa.md`. |
+
 ## O que ainda NÃO existe (próximos passos)
 
 1. **Música** com fonte dedicada (a trilha `musica` já é ducada e tem nível no
    `MixPolicy`; falta um `MusicEvent`/gerador — uma trilha via `LibrarySfxBackend` já roda).
-2. **Espaço multi-local**: as ambiências já são localizadas no TEMPO, mas o reverb
-   (o "lugar") é um só por cena; uma história que anda por lugares pediria segmentar
-   em cenas com espaços próprios.
+2. **Fontes em outro cômodo a partir da prosa**: o `SceneModel` já modela oclusão
+   (fonte ≠ ouvinte), mas a detecção automática põe a fonte no cômodo do POV (baseline
+   honesto); colocar uma voz "vinda da cozinha" pede autoria explícita ou um LLM.
 3. **Crossfade equal-power em `sobreposicao` longa**; **sincronia fina SFX↔verbo** via
    forced alignment sobre a narração; calibração do `LlamaDirector`; `NeuralSfxBackend`.
 

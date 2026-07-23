@@ -5,6 +5,8 @@
     python -m k_nar historia.md --sem-narrador      # modo radiodrama
     python -m k_nar historia.md --idioma en         # sobrescreve o front-matter
     python -m k_nar historia.md --sons sounds/      # usa samples reais (manifest.json)
+    python -m k_nar historia.md --pessoa primeira   # narração na voz do protagonista
+    python -m k_nar historia.md --sem-espaco        # desliga o reverb por cômodo
 
 As flags sobrescrevem o front-matter da história; o front-matter sobrescreve os
 defaults. Ver o formato em `docs/TEMPLATE.md`.
@@ -34,6 +36,10 @@ def build_parser() -> argparse.ArgumentParser:
                      help="força SEM narrador (radiodrama)")
     p.add_argument("--sons", "--sounds", dest="sons", help="pasta de samples reais (com manifest.json)")
     p.add_argument("--models", default="models/piper", help="pasta dos modelos Piper")
+    p.add_argument("--pessoa", "--person", dest="pessoa",
+                   help="primeira | terceira | auto (sobrescreve o front-matter)")
+    p.add_argument("--sem-espaco", "--no-spatial", dest="espaco", action="store_false",
+                   default=True, help="desliga o 'set virtual' de zonas (reverb por cômodo)")
     p.add_argument("--quiet", action="store_true", help="não imprime o resumo")
     return p
 
@@ -54,6 +60,8 @@ def main(argv: list[str] | None = None) -> int:
         story = replace(story, lang=args.idioma)
     if args.narrador is not None:
         story = replace(story, narrator=args.narrador)
+    if args.pessoa:
+        story = replace(story, person=args.pessoa)
 
     out = Path(args.output) if args.output else src.with_suffix(".wav")
 
@@ -63,7 +71,8 @@ def main(argv: list[str] | None = None) -> int:
         sons = "sounds"
 
     try:
-        res = render_story(story, models_dir=args.models, sounds_dir=sons)
+        res = render_story(story, models_dir=args.models, sounds_dir=sons,
+                           spatialize=args.espaco)
     except ValueError as e:
         # ex.: história sem nenhuma fala/narração/som após a segmentação
         print(f"erro: não consegui montar a cena ({e}). A história tem conteúdo?",
@@ -75,10 +84,12 @@ def main(argv: list[str] | None = None) -> int:
         n_amb = sum(1 for p in res.timeline.placements if p.track == "ambiencia")
         n_sfx = sum(1 for p in res.timeline.placements if p.track == "sfx")
         n_fala = sum(1 for p in res.timeline.placements if p.track in ("dialogo", "narracao"))
+        n_zonas = len({p.space for p in res.timeline.placements if p.space})
         print(f"história : {story.title!r}  ({story.lang}, "
-              f"{'com' if story.narrator else 'sem'} narrador)")
+              f"{'com' if story.narrator else 'sem'} narrador, {res.person} pessoa)")
         print(f"voz      : {res.voice_kind}")
-        print(f"trilhas  : {n_fala} falas, {n_sfx} SFX, {n_amb} ambiência")
+        print(f"trilhas  : {n_fala} falas, {n_sfx} SFX, {n_amb} ambiência"
+              + (f", {n_zonas} cômodos (espacial)" if n_zonas else ""))
         print(f"duração  : {_fmt(res.timeline.total_duration_ms)}")
         print(format_report(res.issues))
     print(f"áudio    : {out.resolve()}")

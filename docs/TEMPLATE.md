@@ -14,6 +14,8 @@ história em prosa embaixo:
 titulo: A Ponte de Comando
 idioma: pt            # pt | en | es
 narrador: sim         # sim / nao  (com ou sem narrador)
+pessoa: terceira      # terceira | primeira | auto  (quem conta a história)
+protagonista:         # em 1ª pessoa: o nome de quem narra (opcional)
 ambientacao: cockpit_metalico_eco
 ---
 
@@ -24,7 +26,11 @@ Ninguém respondeu. Então um tiro disparou nas sombras.
 ```
 
 Todos os campos do front-matter são opcionais (defaults: `pt`, com narrador,
-ambiência `seco`). Sem front-matter, é só a prosa.
+`pessoa: auto`, ambiência `seco`). Sem front-matter, é só a prosa.
+
+> **Dois modelos prontos:** `examples/template_terceira_pessoa.md` (narrador conta) e
+> `examples/template_primeira_pessoa.md` (o protagonista conta). Copie o que combina
+> com a sua história.
 
 ## Como o K-NAR lê a sua história
 
@@ -38,16 +44,40 @@ Cada frase vira um de quatro tipos, automaticamente:
 | `A floresta noturna zumbia.` (cenário) | **AMBIÊNCIA** — uma cama de fundo pela cena toda |
 | o resto da prosa | **NARRAÇÃO** — lida pelo narrador (se houver) |
 
-### Distância e lugar (espacialização)
+### Quem conta: 3ª pessoa vs 1ª pessoa
 
-O K-NAR entende **de onde** o som vem:
+- **3ª pessoa** (`pessoa: terceira`) — um **narrador de fora** conta ("*ele* entrou…").
+  No áudio o narrador tem voz própria e é **seco/íntimo**: não está na cena, está te
+  contando. É o padrão.
+- **1ª pessoa** (`pessoa: primeira`) — o **protagonista** conta ("*eu* entrei…"). A
+  narração usa a **mesma voz** dele (diga `protagonista: Nome` para casar com as falas)
+  e, por ele estar **dentro da cena**, ganha o **eco do cômodo** onde ele está — você
+  ouve pelos ouvidos dele.
+- `pessoa: auto` (padrão) — o K-NAR detecta contando "eu/meu" vs "ele/ela" na narração.
+
+### Vozes por aparência (elenco automático)
+
+O K-NAR **escolhe a voz de cada personagem** pela descrição na prosa — não só
+"homem/mulher", mas **idade, gênero e timbre**. Descreva o personagem quando ele
+aparece: *"o **velho** de voz **rouca**"* → voz grave e lenta; *"a **menina**"* → voz
+aguda e ágil; *"a **jovem**"*, *"o **senhor**"*, etc. Sem descritor, ele recebe uma voz
+adulta neutra (ainda distinta das outras). O gênero vem dos **descritores**, nunca de
+adivinhar pelo nome.
+
+### Distância e lugar (o "set virtual" de zonas)
+
+O K-NAR entende **de onde** o som vem e monta um **set acústico** da cena:
 
 - **Distância:** "tiros **ao longe**" soam baixos e abafados (o ar come os agudos) e
   mais centrais; "um tiro **à queima-roupa**" soa alto, seco e largo. Palavras como
   *ao longe / distante / no horizonte* e *perto / ao lado / queima-roupa* controlam isso.
-- **Espaço acústico:** mencione o lugar e a **voz ganha o eco** dele — *galpão / armazém*
-  (eco grande e vazio), *catedral / igreja*, *caverna*, *túnel*, *banheiro*. Ou fixe no
-  front-matter: `ambientacao: galpao_vazio`.
+- **Cômodos (zonas):** mencione os lugares por onde a cena passa — *cozinha, sala,
+  corredor, porão, quintal…* — e o K-NAR monta um **mapa da casa**. O **eco segue o
+  personagem** de cômodo em cômodo (a sala grande ecoa, o quintal é aberto e seco), e
+  uma voz do **cômodo ao lado** soa **abafada** (a parede come os agudos). Isso liga
+  sozinho quando há **2+ cômodos**; desligue com `--sem-espaco`.
+- **Espaço fixo:** para uma cena única, fixe o eco no front-matter:
+  `ambientacao: galpao_vazio` (ou *catedral, caverna, túnel, banheiro…*).
 
 ### Dicas para um bom resultado
 

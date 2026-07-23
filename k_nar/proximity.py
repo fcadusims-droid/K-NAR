@@ -43,7 +43,11 @@ class ProximityPolicy:
         "muito_distante": "muito_longe", "faraway": "muito_longe", "remoto": "muito_longe",
     }
 
-    def resolve(self, distance: str) -> Proximity:
+    def canonical(self, distance: str) -> str:
+        """Rótulo canônico de distância (resolve apelidos). Desconhecido → 'media'."""
         key = str(distance or "media").strip().lower()
         key = self._aliases.get(key, key)
-        return self.levels.get(key, self.levels["media"])
+        return key if key in self.levels else "media"
+
+    def resolve(self, distance: str) -> Proximity:
+        return self.levels[self.canonical(distance)]

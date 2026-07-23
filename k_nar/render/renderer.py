@@ -43,6 +43,8 @@ class TimelineRenderer:
         self.mix = mix or MixPolicy()
         if duck_db is not None:
             self.mix.duck_db = duck_db
+        # cache de IRs por preset (modo espacial: reverb por-evento reusa o IR do cômodo).
+        self._ir_cache: dict[str, np.ndarray] = {}
 
     @property
     def duck_db(self) -> float:
@@ -57,20 +59,55 @@ class TimelineRenderer:
         """Devolve a mixagem estéreo (2, N) float32.
 
         Multitrack: cada trilha (diálogo/narração/...) é mixada no seu próprio bed e
-        os beds são combinados por `_combine_tracks`. Hoje a combinação é soma simples
-        (idêntico ao mono-bus); é o ponto onde o ducking entra nas fases seguintes.
+        os beds são combinados por `_combine_tracks`.
+
+        Reverb tem dois modos. CLÁSSICO: um IR global da cena unifica todas as vozes no
+        mesmo espaço (barato). ESPACIAL (Nível 1): cada evento carrega o preset do
+        cômodo do OUVINTE (`Placement.space`) e é reverberado POR-EVENTO — o eco "segue"
+        o POV pela casa e vozes de cômodos diferentes soam em cômodos diferentes. Nesse
+        modo NÃO há reverb global (cada evento já traz o seu).
         """
-        ir = make_impulse_response(timeline.ambiance, self.sr)
-        tail = len(ir) if mode == "full" and timeline.ambiance != "seco" else 0
+        spatial = mode == "full" and any(p.space for p in timeline.placements)
+        if spatial:
+            tail = max((len(self._ir(p.space)) for p in timeline.placements if p.space),
+                       default=0)
+            ir = None
+        else:
+            ir = make_impulse_response(timeline.ambiance, self.sr)
+            tail = len(ir) if mode == "full" and timeline.ambiance != "seco" else 0
         total = self._ms(timeline.total_duration_ms) + tail + self.sr // 2
 
         beds = self._render_tracks(timeline, clips, mode, total)
         bed = self._combine_tracks(beds, total)
 
-        if mode == "full" and timeline.ambiance != "seco":
+        if not spatial and mode == "full" and timeline.ambiance != "seco":
             bed = dsp.convolution_reverb(bed, ir, wet=self.reverb_wet)
 
         return self._master(bed, mode)
+
+    # ------------------------------------------------------------------ #
+    def _ir(self, preset: str) -> np.ndarray:
+        """IR do preset (cacheado por cena)."""
+        ir = self._ir_cache.get(preset)
+        if ir is None:
+            ir = make_impulse_response(preset, self.sr)
+            self._ir_cache[preset] = ir
+        return ir
+
+    def _reverb(self, stereo: np.ndarray, p: Placement, mode: str) -> np.ndarray:
+        """Reverb POR-EVENTO (modo espacial): convolve com o IR do cômodo do ouvinte e
+        ESTENDE o sinal pela cauda — o eco toca depois do evento acabar, dando vida ao
+        cômodo (não é cortado no fim da fala). `seco`/naive: sem efeito."""
+        if mode == "naive" or not p.space or p.space == "seco":
+            return stereo
+        ir = self._ir(p.space)
+        n = stereo.shape[1] + len(ir) - 1
+        out = np.zeros((2, n), dtype=np.float32)
+        wet = self.reverb_wet
+        for ch in range(stereo.shape[0]):
+            out[ch, :stereo.shape[1]] += (1.0 - wet) * stereo[ch]
+            out[ch] += wet * dsp.fft_convolve(stereo[ch], ir)
+        return out
 
     # ------------------------------------------------------------------ #
     def _render_tracks(self, timeline: Timeline, clips: dict[str, np.ndarray],
@@ -174,8 +211,11 @@ class TimelineRenderer:
             fade_out = max(end - cut, self._ms(p.fade_out_ms))
             seg = dsp.apply_fades(seg, self._ms(p.fade_in_ms), fade_out,
                                   curve_in="cosine", curve_out="equal_power")
+            # Distância/oclusão (modo espacial): a parede/ar comem os agudos.
+            if p.lowpass_hz > 0:
+                seg = dsp.lowpass_1pole(seg, p.lowpass_hz, self.sr)
             seg = seg * (10.0 ** (p.gain_db / 20.0))   # dinâmica: contraste de tensão
-            return dsp.equal_power_pan(seg, p.pan)
+            return self._reverb(dsp.equal_power_pan(seg, p.pan), p, mode)
 
         if mode == "naive":
             return np.stack([mono, mono]).astype(np.float32)
@@ -184,11 +224,14 @@ class TimelineRenderer:
         curve_in = "equal_power" if p.entry_type in ("interrupcao", "sobreposicao") else "cosine"
         mono = dsp.apply_fades(mono, self._ms(p.fade_in_ms), self._ms(p.fade_out_ms),
                                curve_in=curve_in)
-        # Distância: o ar come os agudos de um som ao longe (passa-baixa).
+        # Distância/oclusão: o ar/parede comem os agudos de um som ao longe (passa-baixa).
         if p.lowpass_hz > 0:
             mono = dsp.lowpass_1pole(mono, p.lowpass_hz, self.sr)
         mono = mono * (10.0 ** (p.gain_db / 20.0))   # dinâmica / distância
-        return dsp.equal_power_pan(mono, p.pan)
+        # Reverb por-evento (modo espacial): o cômodo do ouvinte. Ambiência (cama) não
+        # recebe — ela É o fundo, não uma fonte no cômodo.
+        stereo = dsp.equal_power_pan(mono, p.pan)
+        return self._reverb(stereo, p, mode) if p.track != "ambiencia" else stereo
 
     @staticmethod
     def _overlay(bed: np.ndarray, stereo: np.ndarray, start: int) -> None:
