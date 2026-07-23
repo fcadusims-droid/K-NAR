@@ -306,11 +306,37 @@ tensão da fala, a força do tiro) e por BUS (o mixador decide o balanço geral 
 `renderer._combine_tracks` aplica o trim de bus e então o ducking — afinar o "som" do
 audiodrama inteiro é ajustar um objeto. Um `MixPolicy` diferente = um estilo de mixagem.
 
-## O que ainda NÃO existe (próximos passos — Fase 6)
+## Biblioteca de som REAL (implementado)
+
+O motor CITA áudio real em vez de gerar tudo. `k_nar/sfx/catalog.py` é a taxonomia
+única (~55 sons: tag → categoria, ambiência, categoria ESC-50). `scripts/download_sfx.py`
+baixa o [ESC-50](https://github.com/karoldvl/ESC-50) (2000 clipes, 50 categorias que
+mapeiam quase 1:1 com áudio narrativo) **ciente de licença**: cada clipe tem a sua
+(muitos CC0/CC-BY), o script prefere os mais livres e registra atribuição (`--free-only`
+mantém só CC0/CC-BY). O `LibrarySfxBackend` trima/normaliza o SFX pontual e deixa a
+ambiência inteira p/ loop; sons eletrônicos que o ESC-50 não tem (estática de rádio,
+transformador, tom de discagem) são sintetizados no `ProceduralSfxBackend` (fallback).
+Os léxicos do Screenwriter foram muito ampliados (PT/EN/ES) + diálogo por **travessão**
++ verbos de fala no **presente** + camas de ambiência capadas às 3 mais frequentes.
+
+## Espacialização: distância + espaço acústico (implementado)
+
+*De onde* o som vem, resolvido da prosa:
+
+| Peça | Papel |
+|---|---|
+| `k_nar/proximity.py::ProximityPolicy` | matriz DISTÂNCIA → acústica: "ao longe" = −ganho + passa-baixa (o ar come os agudos) + mais central; "à queima-roupa" = +ganho, largo. Rótulo em `SfxEvent.distance`; o Screenwriter detecta (far/near words); o Orquestrador grava ganho/pan/`lowpass_hz` na EDL; o renderer aplica (`dsp.lowpass_1pole`). |
+| `render/impulse.py` (presets) | ESPAÇO acústico: `galpao_vazio`, `catedral`, `caverna`, `quarto_pequeno`, `banheiro`, `tunel` (além dos antigos). O reverb convolutivo por cena já unia as vozes; agora o **lugar é detectado na prosa** ("galpão vazio" → eco na voz de todos) via `Screenwriter._detect_space`, ou fixado no front-matter `ambientacao`. |
+
+Ver `examples/demo_espacializacao.md` (galpão + tiros perto/longe/horizonte).
+
+## O que ainda NÃO existe (próximos passos)
 
 1. **Música** com fonte dedicada (a trilha `musica` já é ducada e tem nível no
    `MixPolicy`; falta um `MusicEvent`/gerador — uma trilha via `LibrarySfxBackend` já roda).
-2. **Crossfade equal-power em `sobreposicao` longa**; **sincronia fina SFX↔verbo** via
+2. **Cena multi-local**: hoje uma história é uma cena só (ambiência/espaço únicos);
+   uma história que anda por lugares/tempos pediria segmentação em cenas.
+3. **Crossfade equal-power em `sobreposicao` longa**; **sincronia fina SFX↔verbo** via
    forced alignment sobre a narração; calibração do `LlamaDirector`; `NeuralSfxBackend`.
 
 ## Visão: motor de áudio narrativo completo (roadmap)
