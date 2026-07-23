@@ -127,6 +127,14 @@ raios (caro, frágil e quase inaudível em estéreo) — ver "Riscos honestos".
   **seco** (fora da cena); 1ª pessoa = a narração É o protagonista (mesma voz, **dentro**
   da cena, leva o reverb do cômodo). Detectada da narração ou fixa no front-matter, com
   dois templates prontos (`examples/template_{primeira,terceira}_pessoa.md`).
+* **Refinamentos de mixagem (pós-feedback de audição)** ✅: (a) **qualidade de voz** — o
+  reverb por-evento a `wet` fixo abafava a fala ("160p"); agora o `wet` é **por cômodo**
+  (pequeno = seco, voz limpa). (b) **nível de SFX por categoria** — foley (passos) senta
+  abaixo de um impacto (não vão todos ao mesmo pico). (c) **material** (`MaterialPolicy`)
+  — bota em madeira ≠ chinelo em concreto (timbre + nível), p/ qualquer foley. (d)
+  **fonte cross-room da prosa** — "da cozinha, ela gritou" põe a voz noutro cômodo
+  (oclusão) sem mover o POV. (e) **auto-atribuição em 1ª pessoa** ("gritei" → voz do
+  protagonista). Ver `examples/primeira_pessoa_demo.md`.
 
 ## Caminho crítico
 

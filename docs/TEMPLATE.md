@@ -73,9 +73,15 @@ O K-NAR entende **de onde** o som vem e monta um **set acústico** da cena:
   *ao longe / distante / no horizonte* e *perto / ao lado / queima-roupa* controlam isso.
 - **Cômodos (zonas):** mencione os lugares por onde a cena passa — *cozinha, sala,
   corredor, porão, quintal…* — e o K-NAR monta um **mapa da casa**. O **eco segue o
-  personagem** de cômodo em cômodo (a sala grande ecoa, o quintal é aberto e seco), e
-  uma voz do **cômodo ao lado** soa **abafada** (a parede come os agudos). Isso liga
-  sozinho quando há **2+ cômodos**; desligue com `--sem-espaco`.
+  personagem** de cômodo em cômodo (a sala grande ecoa, o quintal é aberto e seco).
+  Numa frase com dois cômodos (*"andei pelo corredor **até a sala**"*), o POV termina
+  no **destino** (a sala). Isso liga sozinho quando há **2+ cômodos** (`--sem-espaco` desliga).
+- **Voz vinda de outro cômodo:** escreva *"**da** cozinha, ela gritou"* (com **da/do**)
+  enquanto o personagem está noutro cômodo — a voz soa **abafada, atravessando a parede**.
+  Quando o personagem entra naquele cômodo, a mesma voz fica limpa.
+- **Material do chão/passos:** *"passos de **bota** no **assoalho de madeira**"* soa
+  diferente de *"**chinelo** no **concreto**"* — o K-NAR ajusta o timbre e o volume pelo
+  material (bota soca; chinelo/tapete/descalço abafam e somem). Vale p/ qualquer som.
 - **Espaço fixo:** para uma cena única, fixe o eco no front-matter:
   `ambientacao: galpao_vazio` (ou *catedral, caverna, túnel, banheiro…*).
 

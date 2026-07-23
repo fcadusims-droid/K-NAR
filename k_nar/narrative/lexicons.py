@@ -37,6 +37,13 @@ class Lexicon:
     # SÓ na narração (o diálogo sempre tem "eu"). Ver narrative/person.py.
     first_person: frozenset[str] = field(default_factory=frozenset)
     third_person: frozenset[str] = field(default_factory=frozenset)
+    # verbos de fala em 1ª pessoa ("gritei", "murmurei") — sem nome, é o NARRADOR que
+    # fala. Em 1ª pessoa, essas falas usam a mesma voz da narração (o protagonista).
+    first_person_speech: frozenset[str] = field(default_factory=frozenset)
+    # MATERIAL do som: superfície ("madeira", "concreto") e calçado ("bota", "chinelo")
+    # → chave canônica da MaterialPolicy. Passos de bota em madeira ≠ chinelo em
+    # concreto (timbre + nível). Vale p/ qualquer foley, não só passos.
+    material_triggers: dict[str, str] = field(default_factory=dict)
 
 
 # --------------------------------------------------------------------------- #
@@ -152,6 +159,35 @@ PT = Lexicon(
                             "comigo", "nos", "nossa", "nosso"}),
     third_person=frozenset({"ele", "ela", "eles", "elas", "dele", "dela", "deles",
                             "delas", "lhe"}),
+    first_person_speech=frozenset({
+        "gritei", "berrei", "bradei", "chamei", "murmurei", "sussurrei", "cochichei",
+        "respondi", "perguntei", "indaguei", "falei", "exclamei", "retruquei",
+        "repliquei", "resmunguei", "implorei", "pedi", "insisti", "continuei",
+        "completei", "acrescentei", "pensei", "balbuciei",
+        # presente
+        "digo", "falo", "grito", "respondo", "pergunto", "sussurro", "murmuro",
+        "penso", "peco", "continuo", "exclamo",
+    }),
+    material_triggers={
+        # superfícies
+        "madeira": "madeira", "assoalho": "madeira", "tabuas": "madeira",
+        "tabua": "madeira", "taboas": "madeira", "concreto": "concreto",
+        "cimento": "concreto", "asfalto": "concreto", "pedra": "pedra",
+        "pedras": "pedra", "paralelepipedo": "pedra", "metal": "metal", "aco": "metal",
+        "ferro": "metal", "metalico": "metal", "metalica": "metal", "vidro": "vidro",
+        "azulejo": "azulejo", "ladrilho": "azulejo", "ceramica": "ceramica",
+        "porcelana": "ceramica", "grama": "grama", "gramado": "grama", "relva": "grama",
+        "terra": "terra", "barro": "lama", "lama": "lama", "folhas": "folhas",
+        "folhagem": "folhas", "folhaseca": "folhas", "tapete": "tapete",
+        "carpete": "carpete", "neve": "neve", "areia": "areia", "cascalho": "cascalho",
+        "brita": "cascalho", "saibro": "cascalho",
+        # calçado
+        "bota": "bota", "botas": "bota", "coturno": "bota", "coturnos": "bota",
+        "salto": "salto", "saltos": "salto", "tenis": "tenis", "sapato": "bota",
+        "sapatos": "bota", "chinelo": "chinelo", "chinelos": "chinelo",
+        "sandalia": "sandalia", "sandalias": "sandalia", "descalco": "descalco",
+        "descalca": "descalco", "descalcos": "descalco", "meia": "meia", "meias": "meia",
+    },
 )
 
 # --------------------------------------------------------------------------- #
@@ -225,6 +261,22 @@ EN = Lexicon(
     first_person=frozenset({"i", "me", "my", "mine", "myself", "we", "our", "us"}),
     third_person=frozenset({"he", "she", "they", "him", "her", "his", "hers",
                             "them", "their"}),
+    material_triggers={
+        "wood": "madeira", "wooden": "madeira", "floorboards": "madeira",
+        "planks": "madeira", "concrete": "concreto", "cement": "concreto",
+        "asphalt": "concreto", "pavement": "concreto", "stone": "pedra",
+        "cobblestone": "pedra", "metal": "metal", "steel": "metal", "iron": "metal",
+        "metallic": "metal", "glass": "vidro", "tile": "azulejo", "tiles": "azulejo",
+        "tiled": "azulejo", "ceramic": "ceramica", "grass": "grama", "lawn": "grama",
+        "dirt": "terra", "earth": "terra", "mud": "lama", "leaves": "folhas",
+        "carpet": "carpete", "rug": "tapete", "snow": "neve", "sand": "areia",
+        "gravel": "cascalho",
+        # footwear
+        "boot": "bota", "boots": "bota", "heel": "salto", "heels": "salto",
+        "sneakers": "tenis", "sneaker": "tenis", "shoe": "bota", "shoes": "bota",
+        "slipper": "chinelo", "slippers": "chinelo", "sandal": "sandalia",
+        "sandals": "sandalia", "barefoot": "descalco", "socks": "meia", "sock": "meia",
+    },
 )
 
 # --------------------------------------------------------------------------- #
@@ -294,6 +346,26 @@ ES = Lexicon(
     first_person=frozenset({"yo", "mi", "mis", "me", "conmigo", "mio", "mia",
                             "nosotros", "nuestra", "nuestro"}),
     third_person=frozenset({"ella", "ellos", "ellas", "le", "les", "suyo", "suya"}),
+    first_person_speech=frozenset({
+        "dije", "grite", "pregunte", "respondi", "susurre", "murmure", "exclame",
+        "llame", "pense", "conteste", "replique", "pedi", "insisti", "continue",
+        "digo", "grito", "pregunto", "respondo", "susurro", "murmuro", "pienso",
+    }),
+    material_triggers={
+        "madera": "madeira", "tablas": "madeira", "tarima": "madeira",
+        "concreto": "concreto", "cemento": "concreto", "asfalto": "concreto",
+        "piedra": "pedra", "adoquin": "pedra", "metal": "metal", "acero": "metal",
+        "hierro": "metal", "metalico": "metal", "vidrio": "vidro", "azulejo": "azulejo",
+        "baldosa": "azulejo", "ceramica": "ceramica", "hierba": "grama",
+        "cesped": "grama", "tierra": "terra", "barro": "lama", "lodo": "lama",
+        "hojas": "folhas", "alfombra": "tapete", "nieve": "neve", "arena": "areia",
+        "grava": "cascalho", "gravilla": "cascalho",
+        # calzado
+        "bota": "bota", "botas": "bota", "tacon": "salto", "tacones": "salto",
+        "zapato": "bota", "zapatos": "bota", "zapatillas": "tenis",
+        "chancla": "chinelo", "chanclas": "chinelo", "sandalia": "sandalia",
+        "descalzo": "descalco", "descalza": "descalco", "calcetines": "meia",
+    },
 )
 
 LEXICONS: dict[str, Lexicon] = {

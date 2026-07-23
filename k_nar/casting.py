@@ -120,7 +120,8 @@ def infer_traits(characters, prose: str, lang: str = "pt") -> dict[str, Traits]:
     quando dois personagens dividem a frase)."""
     key = _lang_key(lang)
     tw = _TRAITS[key]
-    chars = [c for c in characters if c and c not in ("Narrador", "?", "Personagem")]
+    chars = [c for c in characters
+             if c and c not in ("Narrador", "?", "Personagem", "__EU__")]
     norm_names = {c: _norm(c) for c in chars}
     votes = {c: {"male": 0, "female": 0, "child": 0, "young": 0, "old": 0,
                  "grave": 0, "agudo": 0} for c in chars}

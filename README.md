@@ -107,6 +107,14 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
   de rótulos à mão. A/B real: `scripts/ab_spatial.py` (oclusão −95% de agudos entre
   cômodos; cauda de reverb varia 6× mais por cômodo, sem regressão de mix).
 
+**Material do foley (`k_nar/material.py`):**
+
+- Passo de **bota em madeira** ≠ **chinelo em concreto**: o K-NAR lê o material
+  (superfície + calçado) na prosa e ajusta **timbre** (materiais macios abafam) e
+  **nível** (bota soca, chinelo é discreto). Vale p/ qualquer foley, não só passos.
+- **Nível por categoria**: foley (passos) senta mais baixo que um impacto (tiro) —
+  não vão mais todos ao mesmo volume.
+
 **Elenco de vozes por aparência (`k_nar/casting.py`):**
 
 - O K-NAR **infere idade/gênero/timbre** de cada personagem dos **descritores** na prosa

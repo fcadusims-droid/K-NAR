@@ -47,12 +47,22 @@ class TestLibraryConditioning(unittest.TestCase):
         from k_nar.sfx import LibrarySfxBackend
         return LibrarySfxBackend({}, sr=1000, **kw)
 
-    def test_sfx_capped_and_normalized(self):
+    def test_sfx_capped_and_normalized_per_category(self):
         lib = self._lib(sfx_max_s=2.5)
         audio = np.ones(5000, dtype=np.float32) * 0.2   # 5s constante em 1000 Hz
-        out = lib._condition(audio, "tiro")             # não-ambiência -> capado
+        out = lib._condition(audio, "tiro")             # impacto -> pico alto (soca)
         self.assertLessEqual(len(out), int(2.5 * 1000) + 1)
-        self.assertAlmostEqual(float(np.max(np.abs(out))), 0.9, places=2)  # normalizado
+        self.assertAlmostEqual(float(np.max(np.abs(out))), 0.95, places=2)
+
+    def test_foley_sits_lower_than_impact(self):
+        # passos (foley) devem sentar MAIS BAIXOS que um impacto (tiro) — antes iam os
+        # dois a 0.9 e os passos ficavam altos demais.
+        lib = self._lib()
+        audio = np.ones(2000, dtype=np.float32) * 0.2
+        foley = float(np.max(np.abs(lib._condition(audio, "passos"))))
+        impact = float(np.max(np.abs(lib._condition(audio, "tiro"))))
+        self.assertLess(foley, impact)
+        self.assertAlmostEqual(foley, 0.55, places=2)
 
     def test_ambience_not_capped(self):
         lib = self._lib()

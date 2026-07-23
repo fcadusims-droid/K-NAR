@@ -101,19 +101,36 @@ class RuleBasedScreenwriter:
         # ENTRA num quando a prosa o menciona ("entrou na cozinha"). O reverb passa a
         # seguir o POV pela casa. Cada elemento é ancorado à zona ATUAL do ouvinte.
         zone_space: dict[str, str] = {}          # zona -> preset de reverb
-        zone_of_event: dict[str, str] = {}       # event_id -> zona (ouvinte=fonte no baseline)
+        zone_of_event: dict[str, str] = {}       # event_id -> zona do OUVINTE
+        source_of_event: dict[str, str] = {}     # event_id -> zona da FONTE (se != ouvinte)
         zone_links: set = set()                  # pares de zonas que o POV percorreu (portas)
         zone_order: list[str] = []               # ordem de visita (a 1ª é a zona padrão)
         current_zone: str | None = None
+        pending_source: str | None = None        # "da cozinha, ela gritou" (fonte noutro cômodo)
 
-        def _enter(el_id: str) -> None:
+        def _enter(el_id: str, kind: str = "narracao") -> None:
             if current_zone:
                 zone_of_event[el_id] = current_zone
+            # "vindo de outro cômodo" vale só p/ a VOZ de um personagem ou um SOM — não
+            # p/ a narração (o narrador não é relocado ao cômodo que ele descreve).
+            if pending_source and kind in ("fala", "sfx"):
+                source_of_event[el_id] = pending_source
 
         for sent in self._sentences(masked):
             plain = _MASK_RE.sub(" ", sent)
+            src_room = self._source_room(plain, lex)  # "da/do <cômodo>" = som VEM de lá
             zone = self._zone_of(plain, lex)          # (zona, preset) ou None
-            if zone:
+            pending_source = None
+            if src_room and current_zone and src_room[0] != current_zone:
+                # o som/voz VEM de outro cômodo: registra a zona-fonte e a porta, mas o
+                # POV NÃO se move (fica ouvindo do cômodo atual) → dispara a oclusão.
+                rid, rpreset = src_room
+                zone_space.setdefault(rid, rpreset)
+                zone_links.add(frozenset((current_zone, rid)))
+                if rid not in zone_order:
+                    zone_order.append(rid)
+                pending_source = rid
+            elif zone:
                 zid, preset = zone
                 zone_space.setdefault(zid, preset)
                 if zid != current_zone:
@@ -136,7 +153,7 @@ class RuleBasedScreenwriter:
                     if cue:
                         el["deixa"] = cue
                     elementos.append(el)
-                    _enter(el["id"])
+                    _enter(el["id"], "fala")
                     last_id = el["id"]
                 continue
 
@@ -155,8 +172,11 @@ class RuleBasedScreenwriter:
                 dist = self._distance_of(text, lex)   # "ao longe" -> som distante
                 if dist != "media":
                     el["distancia"] = dist
+                material = self._material_of(text, lex)   # "bota na madeira" -> timbre+nível
+                if material:
+                    el["material"] = material
                 elementos.append(el)
-                _enter(el["id"])
+                _enter(el["id"], "sfx")
                 acoes.append({"gatilho": sfx_tag, "texto": text, "ancora": f"sfx_{counter}"})
                 this_anchor = last_id = el["id"]
 
@@ -165,7 +185,7 @@ class RuleBasedScreenwriter:
                 counter += 1
                 nid = f"narr_{counter}"
                 elementos.append({"id": nid, "tipo": "narracao", "texto": text})
-                _enter(nid)
+                _enter(nid, "narracao")
                 this_anchor = last_id = nid
 
             # Registra a menção da ambiência ancorada na posição desta frase.
@@ -206,7 +226,8 @@ class RuleBasedScreenwriter:
                 "zonas": [{"id": zid, "space": preset} for zid, preset in zone_space.items()],
                 "ligacoes": [sorted(pair) for pair in zone_links],
                 "ouvinte": dict(zone_of_event),
-                "fontes": dict(zone_of_event),   # baseline: fonte no mesmo cômodo do ouvinte
+                # fonte = ouvinte, salvo quando o som "vem de outro cômodo" (oclusão).
+                "fontes": {**zone_of_event, **source_of_event},
                 "zona_padrao": zone_order[0] if zone_order else "",
             }
         return out
@@ -225,15 +246,36 @@ class RuleBasedScreenwriter:
 
     @staticmethod
     def _zone_of(text: str, lex: Lexicon) -> tuple[str, str] | None:
-        """Cômodo mencionado na frase → (id_da_zona, preset_de_reverb). O id é a
-        própria palavra normalizada (dois 'cozinha' = a mesma zona). None se nenhum."""
+        """Cômodo mencionado na frase → (id_da_zona, preset_de_reverb). Quando a frase cita
+        VÁRIOS cômodos ("andei pelo corredor até a sala"), vale o ÚLTIMO — o destino do
+        movimento é onde o POV termina. O id é a palavra normalizada. None se nenhum."""
         if not lex.zone_triggers:
             return None
+        hit = None
         for w in _WORD_RE.findall(text):
             key = _norm(w)
             preset = lex.zone_triggers.get(key)
             if preset:
-                return key, preset
+                hit = (key, preset)
+        return hit
+
+    # marcadores de "vindo DE" (o som vem de outro cômodo): contrações inequívocas
+    # em PT ("da/do"), EN ("from") e ES ("desde"). "de" cru fica de fora (ambíguo).
+    _FROM_MARKERS = frozenset({"da", "do", "das", "dos", "from", "desde"})
+
+    @classmethod
+    def _source_room(cls, text: str, lex: Lexicon) -> tuple[str, str] | None:
+        """Cômodo citado como ORIGEM do som ("da cozinha, ela gritou") → (zona, preset).
+        Só dispara quando um marcador de 'vindo de' precede (até 2 palavras) o cômodo —
+        o que separa 'a voz vem da cozinha' de 'ele entrou na cozinha'. None se não."""
+        if not lex.zone_triggers:
+            return None
+        words = [_norm(w) for w in _WORD_RE.findall(text)]
+        for i, w in enumerate(words):
+            preset = lex.zone_triggers.get(w)
+            if preset and (words[i - 1] in cls._FROM_MARKERS or
+                           (i >= 2 and words[i - 2] in cls._FROM_MARKERS)):
+                return w, preset
         return None
 
     # ------------------------------------------------------------------ #
@@ -283,16 +325,29 @@ class RuleBasedScreenwriter:
         parts = re.split(r"(?<=[.!?…])\s+", text.strip())
         return [p for p in parts if p.strip()]
 
+    # locutor especial: o próprio NARRADOR falando ("gritei", "eu disse"). Em 1ª pessoa
+    # o pipeline casa isto com a voz da narração (o protagonista).
+    NARRATOR_SELF = "__EU__"
+
     def _attribution(self, text: str, last_speaker: str | None,
                      lex: Lexicon) -> tuple[str, str | None]:
         """(locutor, deixa) a partir do trecho de atribuição (fora das aspas)."""
         words = _WORD_RE.findall(text)
-        cue = next((_norm(w) for w in words if _norm(w) in lex.speech_verbs), None)
+        normed = [_norm(w) for w in words]
+        cue = next((n for n in normed if n in lex.speech_verbs), None)
         # locutor: última palavra Capitalizada que não é verbo nem stopword
         speaker = None
         for w in words:
-            if w[:1].isupper() and _norm(w) not in lex.speech_verbs and _norm(w) not in lex.not_names:
+            n = _norm(w)
+            if w[:1].isupper() and n not in lex.speech_verbs and n not in lex.not_names \
+                    and n not in lex.first_person_speech:
                 speaker = w
+        # Auto-atribuição em 1ª pessoa: verbo de fala em 1ª pessoa ("gritei") ou o
+        # pronome "eu"/"yo"/"i", SEM um nome próprio → é o narrador que fala.
+        if speaker is None:
+            fp_cue = next((n for n in normed if n in lex.first_person_speech), None)
+            if fp_cue or (set(normed) & {"eu", "yo", "i"}):
+                return self.NARRATOR_SELF, (cue or fp_cue)
         return (speaker or last_speaker or "Personagem"), cue
 
     @staticmethod
@@ -327,6 +382,19 @@ class RuleBasedScreenwriter:
             if tag:
                 return tag
         return None
+
+    @staticmethod
+    def _material_of(text: str, lex: Lexicon) -> str:
+        """Materiais (superfície + calçado) mencionados na frase → chaves canônicas
+        separadas por espaço ("bota madeira"). Vazio se nenhum. Sem repetição."""
+        if not lex.material_triggers:
+            return ""
+        found: list[str] = []
+        for w in _WORD_RE.findall(text):
+            key = lex.material_triggers.get(_norm(w))
+            if key and key not in found:
+                found.append(key)
+        return " ".join(found)
 
     def _is_pure_sound_cue(self, text: str, lex: Lexicon) -> bool:
         """Frase que é SÓ um som (didascália): curta e sem nome de personagem."""

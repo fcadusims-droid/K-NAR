@@ -81,9 +81,22 @@ class TimelineRenderer:
         bed = self._combine_tracks(beds, total)
 
         if not spatial and mode == "full" and timeline.ambiance != "seco":
-            bed = dsp.convolution_reverb(bed, ir, wet=self.reverb_wet)
+            bed = dsp.convolution_reverb(bed, ir, wet=self._wet_for(timeline.ambiance))
 
         return self._master(bed, mode)
+
+    # Quantidade de "wet" (reverb) por cômodo. A VOZ tem de ficar limpa: reverb demais
+    # num cômodo pequeno faz efeito "caixa/telefone" (as reflexões cedo pentem a voz) —
+    # foi o que deixou a fala com cara de "160p". Cômodos pequenos ficam bem SECOS;
+    # só os grandes/vazios ganham cauda audível. `reverb_wet` do construtor é um TETO.
+    _SPACE_WET = {
+        "seco": 0.0, "quarto_pequeno": 0.11, "banheiro": 0.13, "corredor_estreito": 0.14,
+        "cockpit_metalico_eco": 0.15, "sala_grande": 0.16, "tunel": 0.20,
+        "galpao_vazio": 0.20, "caverna": 0.24, "catedral": 0.26,
+    }
+
+    def _wet_for(self, space: str) -> float:
+        return min(self.reverb_wet, self._SPACE_WET.get(space, 0.16))
 
     # ------------------------------------------------------------------ #
     def _ir(self, preset: str) -> np.ndarray:
@@ -97,13 +110,14 @@ class TimelineRenderer:
     def _reverb(self, stereo: np.ndarray, p: Placement, mode: str) -> np.ndarray:
         """Reverb POR-EVENTO (modo espacial): convolve com o IR do cômodo do ouvinte e
         ESTENDE o sinal pela cauda — o eco toca depois do evento acabar, dando vida ao
-        cômodo (não é cortado no fim da fala). `seco`/naive: sem efeito."""
-        if mode == "naive" or not p.space or p.space == "seco":
+        cômodo (não é cortado no fim da fala). O `wet` é por cômodo (voz limpa em cômodo
+        pequeno). `seco`/naive: sem efeito."""
+        wet = self._wet_for(p.space)
+        if mode == "naive" or not p.space or p.space == "seco" or wet <= 0.0:
             return stereo
         ir = self._ir(p.space)
         n = stereo.shape[1] + len(ir) - 1
         out = np.zeros((2, n), dtype=np.float32)
-        wet = self.reverb_wet
         for ch in range(stereo.shape[0]):
             out[ch, :stereo.shape[1]] += (1.0 - wet) * stereo[ch]
             out[ch] += wet * dsp.fft_convolve(stereo[ch], ir)

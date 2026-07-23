@@ -95,6 +95,8 @@ def _build_profiles(scene, story, lang_profile, models_dir: str):
         else:
             # voz de 1ª pessoa: modelo base, neutra e próxima (≠ narrador onisciente).
             profiles["Narrador"] = VoiceProfile(model_path=str(main_model))
+        # falas auto-atribuídas ("gritei", "eu disse") usam a MESMA voz da narração.
+        profiles["__EU__"] = profiles["Narrador"]
     else:
         profiles["Narrador"] = VoiceProfile(
             model_path=str(narr_model if narr_model.exists() else main_model))

@@ -100,6 +100,26 @@ class TestScreenwriterZones(unittest.TestCase):
         sc = RuleBasedScreenwriter().write("Herman entrou na cozinha e sentou.", lang="pt")
         self.assertNotIn("espaco", sc)   # 1 cômodo: espacializar não muda nada
 
+    def test_voice_from_another_room_is_occluded(self):
+        # POV na sala; a voz vem "da cozinha" → fonte noutra zona (oclusão), POV não move
+        prose = ('Herman estava na sala, lendo. Da cozinha, Baiano gritou: '
+                 '"O jantar esta pronto!". Ele continuou na sala.')
+        sc = RuleBasedScreenwriter().write(prose, lang="pt")
+        esp = sc["espaco"]
+        m = SceneModel.from_dict(esp)
+        fala = next(e for e in esp["ouvinte"] if e.startswith("fala"))
+        self.assertEqual(esp["ouvinte"][fala], "sala")      # ouvinte fica na sala
+        self.assertEqual(esp["fontes"][fala], "cozinha")    # a voz vem da cozinha
+        self.assertGreater(m.cue(fala).occlusion, 0.0)      # → abafada pela parede
+
+    def test_narration_not_relocated_cross_room(self):
+        # "um estrondo veio da cozinha" narrado: o NARRADOR não é movido p/ a cozinha
+        prose = ("Herman estava na sala. Um barulho veio da cozinha. Ele ficou na sala.")
+        sc = RuleBasedScreenwriter().write(prose, lang="pt")
+        esp = sc.get("espaco", {})
+        for eid, z in esp.get("ouvinte", {}).items():
+            self.assertEqual(esp["fontes"].get(eid), z)   # nenhuma narração vira cross-room
+
 
 class TestOrchestratorSpatial(unittest.TestCase):
     def _model(self):
