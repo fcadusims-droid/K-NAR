@@ -201,6 +201,10 @@ class SfxEvent:
     # traduz em nível + abafamento (o ar come os agudos de longe) + largura estéreo —
     # "tiros ao longe" ≠ "à queima-roupa".
     distance: str = "media"
+    # MATERIAL(is) do som (superfície + calçado), separados por espaço: "bota madeira".
+    # A `MaterialPolicy` traduz em timbre + nível (passo de bota em madeira ≠ chinelo em
+    # concreto). Vale p/ qualquer foley, não só passos.
+    material: str = ""
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "SfxEvent":
@@ -214,6 +218,7 @@ class SfxEvent:
             exit=ExitDynamics.from_dict(d.get("saida", d.get("dinamica_de_saida"))),
             text=str(d.get("texto", d.get("descricao", ""))),
             distance=str(d.get("distancia", d.get("distance", "media"))).strip().lower(),
+            material=str(d.get("material", "")).strip().lower(),
         )
 
 

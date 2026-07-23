@@ -89,11 +89,22 @@ class LibrarySfxBackend:
                             samples=np.zeros(1, np.float32))
 
     # ------------------------------------------------------------------ #
+    # Alvo de PICO por categoria de som. Nem todo SFX deve chegar no mesmo volume:
+    # foley percussivo (passos, teclado) tem picos altos mas deve SENTAR baixo; um
+    # impacto (tiro, explosão) é que soca. Normalizar tudo p/ 0.9 deixava os passos
+    # altos demais. Ambiência não passa por aqui (é normalizada por RMS no renderer).
+    _CATEGORY_PEAK = {
+        "foley": 0.55, "humano": 0.6, "eletronico": 0.62, "animais": 0.68,
+        "mecanico": 0.7, "natureza": 0.8, "impacto": 0.95,
+    }
+
     def _condition(self, audio: np.ndarray, tag: str) -> np.ndarray:
         """Prepara o sample para o mix: ambiência fica como está (textura p/ loop);
         SFX pontual é trimado (tira o silêncio das bordas do clipe de 5s) e limitado.
-        Normaliza o pico p/ o nível ficar previsível (ESC-50 varia muito de volume)."""
+        Normaliza o pico p/ um alvo POR CATEGORIA (foley baixo, impacto alto) — o
+        ESC-50 varia muito de volume e nem todo som deve tocar no mesmo nível."""
         from k_nar.render.dsp import peak_normalize, trim_silence
+        from k_nar.sfx.catalog import CATALOG
         if tag not in self.ambience_tags:
             trimmed, _, _ = trim_silence(audio, threshold_db=-35.0, keep_ms=20.0, sr=self.sr)
             if len(trimmed):
@@ -101,8 +112,10 @@ class LibrarySfxBackend:
             cap = int(self.sfx_max_s * self.sr)
             if len(audio) > cap:
                 audio = audio[:cap]
+        sd = CATALOG.get(tag)
+        target = self._CATEGORY_PEAK.get(sd.category, 0.75) if sd else 0.9
         # peak_normalize opera em (canais, N); passamos mono como (1, N) e achatamos
-        return peak_normalize(audio[None, :], target=0.9)[0]
+        return peak_normalize(audio[None, :], target=target)[0]
 
     def _load(self, path: Path) -> np.ndarray | None:
         """Carrega áudio como mono float32 na taxa da cena. None se falhar."""

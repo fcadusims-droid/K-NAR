@@ -372,17 +372,29 @@ de clipping/QA → **ligado por padrão** com 2+ cômodos. Ver `examples/casa_de
 |---|---|
 | `k_nar/casting.py` | Infere `Traits` (gênero/idade/timbre) de cada personagem dos **descritores** na prosa (uma frase com um só personagem credita seus traços — evita cross-atribuição). `voice_for` mapeia traço → `VoiceProfile` (pitch/ritmo): velho grave e lento, criança agudo e ágil. Gênero vem do texto, **nunca do nome** (não "misgenera"); sem descritor → voz neutra + jitter por nome p/ distinguir. |
 | `k_nar/narrative/person.py` | `detect_person` conta pronomes de 1ª vs 3ª pessoa **na narração** (o diálogo sempre tem "eu"). 3ª = narrador onisciente **seco**; 1ª = a narração É o protagonista → mesma voz das falas dele (`protagonista`) e **dentro da cena** (`spatial_narration`, leva o reverb do cômodo). |
+| Auto-atribuição em 1ª pessoa | `Screenwriter._attribution` marca falas sem nome com verbo de fala em 1ª pessoa ("gritei") ou pronome "eu" como `__EU__`; o pipeline casa `__EU__` com a voz da narração — o protagonista e o narrador têm a MESMA voz. |
 | `pipeline._build_profiles` | Junta o elenco + o narrador (por pessoa) num `dict[personagem→VoiceProfile]` p/ o `MultiVoiceTTSBackend`. Front-matter `pessoa`/`protagonista`; CLI `--pessoa`/`--sem-espaco`. Templates: `examples/template_{primeira,terceira}_pessoa.md`. |
+
+## Refinamentos de mixagem: qualidade de voz, material e fonte cross-room (implementado)
+
+Feedback do usuário ao ouvir: a voz soava "160p" na 1ª pessoa, e os passos vinham
+altos demais. Diagnóstico e correção:
+
+| Problema | Causa | Correção |
+|---|---|---|
+| Voz "caixa/telefone" (abafada) | reverb por-evento a `wet=0.30` num cômodo pequeno pente a voz (reflexões cedo) — medido: HF cai ~78% | `renderer._wet_for(space)`: **wet por cômodo** (0.11 em quarto pequeno, até 0.26 em catedral). Cômodo pequeno fica seco → voz limpa; só grandes/vazios ganham cauda. Vale p/ o reverb global também. |
+| Passos altos demais | `LibrarySfxBackend._condition` normalizava TODO SFX ao mesmo pico (0.9); foley percussivo tem pico alto mas deve sentar baixo | **Pico por categoria** (`_CATEGORY_PEAK`): foley 0.55, impacto 0.95. Passos sentam ~4 dB abaixo. |
+| "Passos de bota em madeira ≠ chinelo em concreto" | não havia noção de material | `k_nar/material.py::MaterialPolicy`: material (superfície + calçado) → timbre (passa-baixa) + nível. `Screenwriter._material_of` detecta na prosa; o Orquestrador grava na EDL. Vale p/ qualquer foley. |
+| "Uma voz vinda de outro cômodo" | a fonte era sempre o cômodo do POV | `Screenwriter._source_room` detecta "**da** cozinha, ela gritou" (marcador de origem + cômodo ≠ POV) → fonte noutra zona, POV parado → dispara a oclusão. Só vale p/ voz/SFX, não p/ a narração (o narrador não é relocado). |
 
 ## O que ainda NÃO existe (próximos passos)
 
 1. **Música** com fonte dedicada (a trilha `musica` já é ducada e tem nível no
    `MixPolicy`; falta um `MusicEvent`/gerador — uma trilha via `LibrarySfxBackend` já roda).
-2. **Fontes em outro cômodo a partir da prosa**: o `SceneModel` já modela oclusão
-   (fonte ≠ ouvinte), mas a detecção automática põe a fonte no cômodo do POV (baseline
-   honesto); colocar uma voz "vinda da cozinha" pede autoria explícita ou um LLM.
-3. **Crossfade equal-power em `sobreposicao` longa**; **sincronia fina SFX↔verbo** via
+2. **Crossfade equal-power em `sobreposicao` longa**; **sincronia fina SFX↔verbo** via
    forced alignment sobre a narração; calibração do `LlamaDirector`; `NeuralSfxBackend`.
+3. **Voz neural de qualidade superior** (Piper medium é o teto atual; modelos "high" ou
+   outro motor melhorariam o timbre bruto — o processamento já não abafa mais a voz).
 
 ## Visão: motor de áudio narrativo completo (roadmap)
 

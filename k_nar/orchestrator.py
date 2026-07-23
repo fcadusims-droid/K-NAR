@@ -10,6 +10,7 @@ produz áudio: devolve uma `Timeline` de dados puros, que o DSP renderiza depois
 
 from __future__ import annotations
 
+from k_nar.material import MaterialPolicy
 from k_nar.models import EntryType, Scene, Track
 from k_nar.prosody import ProsodyPolicy
 from k_nar.proximity import ProximityPolicy
@@ -32,7 +33,8 @@ class Orquestrador:
                  proximity: ProximityPolicy | None = None,
                  scene_model: SceneModel | None = None,
                  space_policy: SpacePolicy | None = None,
-                 spatial_narration: bool = False):
+                 spatial_narration: bool = False,
+                 material: MaterialPolicy | None = None):
         self.tts = tts
         self.policy = policy or TimingPolicy()
         # mesma matriz de prosódia do backend neural: o ganho de dinâmica na EDL
@@ -40,6 +42,8 @@ class Orquestrador:
         self.prosody = prosody or ProsodyPolicy()
         # matriz distância → acústica (nível/abafamento/largura) dos SFX.
         self.proximity = proximity or ProximityPolicy()
+        # matriz material → timbre/nível dos SFX (bota em madeira ≠ chinelo em concreto).
+        self.material = material or MaterialPolicy()
         # Nível 1 (modo espacial, OPCIONAL): o "set virtual" de zonas. Quando dado (e
         # não-trivial), a acústica de cada evento é DERIVADA do modelo — reverb do
         # cômodo do ouvinte + oclusão da parede + distância — em vez de rótulos à mão.
@@ -125,6 +129,11 @@ class Orquestrador:
             elif cur_track == Track.SFX.value:
                 self._apply_proximity(placement, getattr(ev, "distance", "media"))
 
+            # MATERIAL do foley (independe de espaço): bota em madeira ≠ chinelo em
+            # concreto — ajusta timbre (passa-baixa) e nível. Só SFX.
+            if cur_track == Track.SFX.value:
+                self._apply_material(placement, ev)
+
             # Interrupção: esta fala SOBE sobre a cauda da anterior ("swell") e
             # CORTA a anterior no ponto de entrada, com crossfade equal-power + snap.
             if prev is not None and etype == EntryType.INTERRUPTION:
@@ -188,6 +197,18 @@ class Orquestrador:
         p.gain_db += prox.gain_db
         p.pan = int(max(-100, min(100, round(p.pan * prox.pan_scale))))
         p.lowpass_hz = prox.lowpass_hz
+
+    def _apply_material(self, p: Placement, ev) -> None:
+        """Timbre + nível do material do foley: bota soca e é grave; chinelo/tapete
+        abafam e somem. Soma ao ganho e combina o passa-baixa (o mais restritivo)."""
+        material = getattr(ev, "material", "")
+        if not material:
+            return
+        gain_db, lowpass = self.material.resolve(material)
+        p.gain_db += gain_db
+        p.material = material
+        if lowpass > 0:
+            p.lowpass_hz = lowpass if p.lowpass_hz <= 0 else min(p.lowpass_hz, lowpass)
 
     def _apply_spatial(self, p: Placement, ev, track: str) -> None:
         """Deriva a acústica do evento do `SceneModel`: o reverb do cômodo do OUVINTE,
