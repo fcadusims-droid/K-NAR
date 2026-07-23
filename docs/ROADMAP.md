@@ -136,6 +136,29 @@ raios (caro, frágil e quase inaudível em estéreo) — ver "Riscos honestos".
   (oclusão) sem mover o POV. (e) **auto-atribuição em 1ª pessoa** ("gritei" → voz do
   protagonista). Ver `examples/primeira_pessoa_demo.md`.
 
+### Fase 8 — Atuação, acústica de mobília e voz de alta qualidade ✅
+
+Feedback do usuário: (1) todo cômodo fechado ecoava como caverna; (2) as vozes não
+atuavam, liam neutro. Além disso, subir a qualidade bruta da voz.
+
+* **Acústica ciente de MOBÍLIA (`Zone.damping`, `PRESET_DAMPING`)** ✅: o cômodo tem um
+  reverb POTENCIAL (tamanho) e um AMORTECIMENTO (mobília/uso). Por padrão é **mobiliado
+  → seco** (escritório em uso não ecoa); só **vazio/nu/reforma** ecoa; "ecoou" na prosa
+  força o eco. O Screenwriter lê móveis vs. vazio; o renderer reduz o wet por `1−damping`.
+* **Sistema de ATUAÇÃO (`k_nar/emotion.py` + `narrative/acting.py`)** ✅: `EmotionPolicy`
+  (emoção → ritmo/pitch/variância/ganho/pausa, irmã da ProsodyPolicy) + inferência por
+  regras (pontuação, léxico de emoção, verbo de fala, **termômetro de cena**, **reação**
+  à linha anterior) + **persona** por personagem (temperamento). A emoção compõe com a
+  tensão na `ProsodyPolicy.resolve`; as pausas emocionais entram no Orquestrador. A
+  narração também atua. O `LlamaDirector` fica como upgrade de inferência.
+* **Voz de ALTA qualidade — XTTS-v2 (`k_nar/tts/xtts.py`)** ✅: `--voz xtts` troca o Piper
+  (não há voz "high" em pt) pelo XTTS, atrás do mesmo `TTSBackend` — voz por personagem
+  via locutor de estúdio + a mesma `EmotionPolicy`. Opt-in (lento, ~s/frase).
+* **Entrega sob limite (`scripts/package_audio.py`)** ✅: Opus (metade do MP3 na mesma
+  qualidade — 41 min ≈ 17 MB) e, se preciso, divisão em partes cortando no silêncio.
+* **Template empírico** ✅: `docs/TEMPLATE.md` reescrito com o que o parser acerta
+  (testado); comentários HTML `<!-- -->` agora são removidos da prosa (não são lidos).
+
 ## Caminho crítico
 
 Não pular direto para SFX. A ordem **0 → 1 → 3** é o caminho crítico: forced

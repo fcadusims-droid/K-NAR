@@ -23,3 +23,4 @@ sounds/
 *.mp3
 scratch_ab/
 *.mp3
+.knar_cache_xtts/

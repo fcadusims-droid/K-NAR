@@ -163,6 +163,9 @@ class Placement:
     # cômodo do OUVINTE quando o evento toca. "" = sem reverb por-evento (o renderer
     # usa o reverb global da cena). É o que faz o eco "seguir" o POV pela casa.
     space: str = ""
+    # Amortecimento do cômodo (0..1): quanto a mobília/uso absorve o reverb. Alto = seco
+    # (cômodo mobiliado em uso); baixo = eco (vazio/nu). O renderer reduz o wet por isto.
+    damping: float = 0.0
 
     @property
     def end_ms(self) -> int:
@@ -186,6 +189,9 @@ class Timeline:
     ambiance: str
     placements: list[Placement] = field(default_factory=list)
     total_duration_ms: int = 0
+    # Amortecimento GLOBAL da cena (0..1) p/ o reverb não-espacial: mobília/uso do espaço
+    # único da cena. Alto = seco; 0 = eco cheio (padrão retrocompat).
+    damping: float = 0.0
 
     def overlaps(self) -> list[tuple[str, str, int]]:
         """Utilitário de QA: pares (a, b, ms_de_sobreposicao) que se cruzam no tempo.

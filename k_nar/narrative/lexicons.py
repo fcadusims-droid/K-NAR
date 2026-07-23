@@ -44,6 +44,12 @@ class Lexicon:
     # → chave canônica da MaterialPolicy. Passos de bota em madeira ≠ chinelo em
     # concreto (timbre + nível). Vale p/ qualquer foley, não só passos.
     material_triggers: dict[str, str] = field(default_factory=dict)
+    # MOBÍLIA / VAZIO: um cômodo mobiliado e em uso é SECO (a mobília absorve); só um
+    # espaço vazio/nu ecoa. `furnishing` reforça "mobiliado" (mais seco); `emptiness`
+    # sinaliza vazio (eco); `echo_words` ("ecoou") força o eco (é intencional na prosa).
+    furnishing: frozenset[str] = field(default_factory=frozenset)
+    emptiness: frozenset[str] = field(default_factory=frozenset)
+    echo_words: frozenset[str] = field(default_factory=frozenset)
 
 
 # --------------------------------------------------------------------------- #
@@ -188,6 +194,25 @@ PT = Lexicon(
         "sandalia": "sandalia", "sandalias": "sandalia", "descalco": "descalco",
         "descalca": "descalco", "descalcos": "descalco", "meia": "meia", "meias": "meia",
     },
+    furnishing=frozenset({
+        "mobilia", "mobiliado", "mobiliada", "moveis", "movel", "mesa", "mesas",
+        "cadeira", "cadeiras", "sofa", "poltrona", "estante", "estantes", "prateleira",
+        "prateleiras", "cortina", "cortinas", "tapete", "tapetes", "carpete", "armario",
+        "cama", "escrivaninha", "gaveta", "gavetas", "papeis", "papelada", "arquivo",
+        "arquivos", "livros", "quadros", "balcao", "almofada", "almofadas",
+        # uso/ocupação (espaço em funcionamento também amortece)
+        "funcionamento", "movimentado", "movimentada", "lotado", "lotada", "cheio",
+        "cheia", "ocupado", "ocupada", "escritorio", "repartição", "reparticao",
+    }),
+    emptiness=frozenset({
+        "vazio", "vazia", "vazios", "vazias", "deserto", "deserta", "abandonado",
+        "abandonada", "abandonados", "reforma", "reformando", "mudanca", "oco", "oca",
+        "nu", "nua", "nuas", "nus", "esvaziado", "esvaziada", "despojado", "despido",
+    }),
+    echo_words=frozenset({
+        "ecoou", "ecoava", "ecoavam", "eco", "ecos", "reverberou", "reverberava",
+        "reverberacao", "retumbou", "retumbava", "ressoou", "ressoava", "ressoando",
+    }),
 )
 
 # --------------------------------------------------------------------------- #
@@ -277,6 +302,20 @@ EN = Lexicon(
         "slipper": "chinelo", "slippers": "chinelo", "sandal": "sandalia",
         "sandals": "sandalia", "barefoot": "descalco", "socks": "meia", "sock": "meia",
     },
+    furnishing=frozenset({
+        "furniture", "furnished", "desk", "desks", "chair", "chairs", "sofa", "couch",
+        "shelf", "shelves", "bookshelf", "curtain", "curtains", "carpet", "rug", "rugs",
+        "wardrobe", "bed", "cabinet", "drawer", "drawers", "papers", "files", "books",
+        "cushion", "cushions", "office", "busy", "crowded", "occupied",
+    }),
+    emptiness=frozenset({
+        "empty", "bare", "deserted", "abandoned", "renovation", "vacant", "hollow",
+        "stripped", "unfurnished", "emptied", "derelict",
+    }),
+    echo_words=frozenset({
+        "echoed", "echoing", "echo", "echoes", "reverberated", "reverberating",
+        "resounded", "resounding",
+    }),
 )
 
 # --------------------------------------------------------------------------- #
@@ -366,6 +405,21 @@ ES = Lexicon(
         "chancla": "chinelo", "chanclas": "chinelo", "sandalia": "sandalia",
         "descalzo": "descalco", "descalza": "descalco", "calcetines": "meia",
     },
+    furnishing=frozenset({
+        "muebles", "mueble", "amueblado", "amueblada", "mesa", "mesas", "silla",
+        "sillas", "sofa", "sillon", "estante", "estanteria", "cortina", "cortinas",
+        "alfombra", "armario", "cama", "escritorio", "cajon", "papeles", "archivos",
+        "libros", "cojin", "cojines", "oficina", "concurrido", "lleno", "ocupado",
+    }),
+    emptiness=frozenset({
+        "vacio", "vacia", "vacios", "vacias", "desierto", "desierta", "abandonado",
+        "abandonada", "reforma", "mudanza", "hueco", "hueca", "desnudo", "desnuda",
+        "despojado", "vaciado",
+    }),
+    echo_words=frozenset({
+        "resono", "resonaba", "eco", "ecos", "reverbero", "reverberaba", "retumbo",
+        "retumbaba", "resonando",
+    }),
 )
 
 LEXICONS: dict[str, Lexicon] = {

@@ -25,14 +25,39 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+# Amortecimento (absorção) PADRÃO por preset: quanto o cômodo "engole" o reverb. Um
+# cômodo mobiliado/em uso (quarto, escritório, sala com móveis) absorve MUITO → quase
+# seco; um espaço grande e NU (galpão, catedral, caverna) reverbera de verdade. É o que
+# separa "sala em uso" (seca) de "galpão vazio" (eco). 0 = vivo/nu; 1 = totalmente seco.
+PRESET_DAMPING = {
+    "quarto_pequeno": 0.78, "banheiro": 0.35, "corredor_estreito": 0.55,
+    "sala_grande": 0.65, "cockpit_metalico_eco": 0.45,
+    "galpao_vazio": 0.12, "catedral": 0.08, "caverna": 0.12, "tunel": 0.20,
+    "seco": 1.0,
+}
+
+
+def default_damping(preset: str) -> float:
+    """Amortecimento padrão de um preset (cômodo mobiliado é o caso comum → seco)."""
+    return PRESET_DAMPING.get(preset, 0.65)
+
+
 @dataclass(frozen=True)
 class Zone:
     """Um cômodo/zona acústica. `space` é a chave do preset de reverb (impulse.py):
-    'quarto_pequeno', 'sala_grande', 'galpao_vazio', 'seco' (aberto), etc."""
+    'quarto_pequeno', 'sala_grande', 'galpao_vazio', 'seco' (aberto), etc.
+
+    `damping` (0..1) é a ABSORÇÃO do cômodo: mobiliado/em uso → alto (seco); vazio/nu →
+    baixo (eco). None = usa o padrão do preset (`default_damping`)."""
 
     id: str
     space: str = "seco"
     name: str = ""
+    damping: float | None = None
+
+    @property
+    def effective_damping(self) -> float:
+        return default_damping(self.space) if self.damping is None else self.damping
 
 
 @dataclass(frozen=True)
@@ -45,6 +70,7 @@ class SpatialCue:
     occlusion: float    # 0..1 p/ a SpacePolicy (0 = mesma zona; 1 = paredes no caminho)
     same_zone: bool     # ouvinte e fonte no mesmo cômodo?
     hops: int           # nº de "paredes"/portas entre as zonas (0 = mesma; -1 = sem caminho)
+    damping: float = 0.0  # absorção do cômodo do OUVINTE (0..1); alto = seco (mobiliado)
 
 
 @dataclass
@@ -116,19 +142,21 @@ class SceneModel:
         """Resolve a acústica espacial de um evento a partir do modelo."""
         lz = self._zone_of_listener(event_id)
         sz = self._zone_of_source(event_id)
-        space = self.zones[lz].space if lz in self.zones else (self.default_zone_space())
+        zone = self.zones.get(lz)
+        space = zone.space if zone else self.default_zone_space()
+        damping = zone.effective_damping if zone else default_damping(space)
         hops = self.hops(lz, sz)
 
         if hops == 0:
             return SpatialCue(space=space, distance="media", occlusion=0.0,
-                              same_zone=True, hops=0)
+                              same_zone=True, hops=0, damping=damping)
         if hops == 1:
             # cômodo vizinho: parte do som vem pela porta, mas a parede come os agudos.
             return SpatialCue(space=space, distance="longe", occlusion=0.55,
-                              same_zone=False, hops=1)
+                              same_zone=False, hops=1, damping=damping)
         # 2+ paredes OU sem caminho: bem abafado e distante.
         return SpatialCue(space=space, distance="muito_longe", occlusion=0.9,
-                          same_zone=False, hops=hops)
+                          same_zone=False, hops=hops, damping=damping)
 
     def default_zone_space(self) -> str:
         z = self.zones.get(self.default_zone)
@@ -142,7 +170,8 @@ class SceneModel:
     def to_dict(self) -> dict[str, Any]:
         """Forma serializável (o Screenwriter emite; o pipeline reconstrói)."""
         return {
-            "zonas": [{"id": z.id, "space": z.space, "nome": z.name}
+            "zonas": [{"id": z.id, "space": z.space, "nome": z.name,
+                       "damping": z.effective_damping}
                       for z in self.zones.values()],
             "ligacoes": [sorted(pair) for pair in self.adjacency],
             "fontes": dict(self.source_zone),
@@ -155,9 +184,11 @@ class SceneModel:
         d = d or {}
         model = cls()
         for z in d.get("zonas", []):
+            damp = z.get("damping")
             model.zones[str(z["id"])] = Zone(
                 id=str(z["id"]), space=str(z.get("space", "seco")),
-                name=str(z.get("nome", z.get("name", ""))))
+                name=str(z.get("nome", z.get("name", ""))),
+                damping=(float(damp) if damp is not None else None))
         for pair in d.get("ligacoes", []):
             if len(pair) == 2:
                 model.link(str(pair[0]), str(pair[1]))

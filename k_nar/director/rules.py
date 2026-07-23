@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from k_nar.director.base import BaseDirector
+from k_nar.narrative.acting import Persona, SceneMood, infer_emotion
 from k_nar.narrative.lexicons import LEXICONS
 from k_nar.text import strip_accents as _norm
 
@@ -30,6 +31,19 @@ _SOFT_CUES = frozenset().union(*(lx.soft_verbs for lx in LEXICONS.values()))
 
 
 class RuleBasedDirector(BaseDirector):
+    def __init__(self, personas: dict[str, Persona] | None = None, lang: str = "pt"):
+        self.personas = personas or {}
+        self.lang = lang
+        self._mood = SceneMood()
+        self._prev_emotion = "neutro"
+
+    def direct(self, script):
+        # o termômetro da cena e a reação são estado POR HISTÓRIA: reinicia a cada roteiro.
+        self._mood = SceneMood()
+        self._prev_emotion = "neutro"
+        self.lang = str(script.get("idioma", script.get("lang", self.lang)))
+        return super().direct(script)
+
     def _decide(self, personagem, texto, index, prev_text, cue=None) -> dict[str, Any]:
         low = _norm(texto)
         words = low.split()
@@ -81,4 +95,13 @@ class RuleBasedDirector(BaseDirector):
         else:
             pausa = "media" if n_words > 10 else "curta"
 
-        return {"tensao": tensao, "tipo": tipo, "agressividade": agg, "pausa": pausa}
+        # --- ATUAÇÃO: emoção da linha, com o clima da cena e a reação à anterior ---
+        persona = self.personas.get(personagem)
+        emocao, intensidade = infer_emotion(
+            texto, cue=cue, scene_tension=self._mood.value,
+            prev_emotion=self._prev_emotion, persona=persona, lang=self.lang)
+        self._mood.update(emocao, intensidade)   # atualiza o termômetro da cena
+        self._prev_emotion = emocao
+
+        return {"tensao": tensao, "tipo": tipo, "agressividade": agg, "pausa": pausa,
+                "emocao": emocao, "intensidade": intensidade}

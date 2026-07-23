@@ -60,7 +60,10 @@ class PiperTTSBackend:
 
         rate = event.voice.rate if event.voice.rate > 0 else 1.0
         tension = ProsodyPolicy.tension_scalar(event.voice.tension)
-        pros = self.prosody.resolve(tension, rate=rate, character=event.character)
+        pros = self.prosody.resolve(
+            tension, rate=rate, character=event.character,
+            emotion=getattr(event.voice, "emotion", "neutro"),
+            intensity=getattr(event.voice, "intensity", 0.0))
 
         # pitch por reamostragem: gera mais LENTO por fator p e reamostra de volta,
         # subindo o pitch em p sem alterar a duração-alvo (length_scale).

@@ -10,6 +10,7 @@ produz áudio: devolve uma `Timeline` de dados puros, que o DSP renderiza depois
 
 from __future__ import annotations
 
+from k_nar.emotion import EmotionPolicy
 from k_nar.material import MaterialPolicy
 from k_nar.models import EntryType, Scene, Track
 from k_nar.prosody import ProsodyPolicy
@@ -34,7 +35,8 @@ class Orquestrador:
                  scene_model: SceneModel | None = None,
                  space_policy: SpacePolicy | None = None,
                  spatial_narration: bool = False,
-                 material: MaterialPolicy | None = None):
+                 material: MaterialPolicy | None = None,
+                 scene_damping: float = 0.0):
         self.tts = tts
         self.policy = policy or TimingPolicy()
         # mesma matriz de prosódia do backend neural: o ganho de dinâmica na EDL
@@ -44,6 +46,10 @@ class Orquestrador:
         self.proximity = proximity or ProximityPolicy()
         # matriz material → timbre/nível dos SFX (bota em madeira ≠ chinelo em concreto).
         self.material = material or MaterialPolicy()
+        # amortecimento global (mobília/uso) do reverb não-espacial da cena.
+        self.scene_damping = scene_damping
+        # matriz de atuação: resolve as micro-pausas emocionais (respiro antes/depois).
+        self.emotion = EmotionPolicy()
         # Nível 1 (modo espacial, OPCIONAL): o "set virtual" de zonas. Quando dado (e
         # não-trivial), a acústica de cada evento é DERIVADA do modelo — reverb do
         # cômodo do ouvinte + oclusão da parede + distância — em vez de rótulos à mão.
@@ -103,6 +109,11 @@ class Orquestrador:
                 etype = EntryType.SEQUENTIAL
 
             start_ms = self._resolve_start(etype, ev.entry.aggressiveness, prev, cursor_ms)
+            # ATUAÇÃO (Fase B2): um respiro ANTES de uma fala carregada (suspense/medo)
+            # — só em entrada sequencial (não atrapalha interrupção/sobreposição).
+            pause_before, pause_after = self._emotion_pauses(ev)
+            if etype == EntryType.SEQUENTIAL:
+                start_ms += pause_before
 
             placement = Placement(
                 event_id=ev.id,
@@ -150,8 +161,9 @@ class Orquestrador:
 
             placements.append(placement)
 
-            # Avança o cursor: fim EFETIVO deste evento + pausa dramática de saída.
-            pause = self.policy.pause_ms(ev.exit)
+            # Avança o cursor: fim EFETIVO deste evento + pausa dramática de saída +
+            # o silêncio emocional DEPOIS (tristeza/cansaço deixam a frase "assentar").
+            pause = self.policy.pause_ms(ev.exit) + pause_after
             cursor_ms = placement.natural_end_ms + pause
             prev = placement
             prev_clip = clip
@@ -184,6 +196,7 @@ class Orquestrador:
             ambiance=scene.ambiance,
             placements=placements,
             total_duration_ms=total,
+            damping=self.scene_damping,   # mobília/uso do espaço único (não-espacial)
         )
 
     # ------------------------------------------------------------------ #
@@ -217,6 +230,7 @@ class Orquestrador:
         cue = self.scene_model.cue(ev.id)
         if cue.space and cue.space != "seco":
             p.space = cue.space
+            p.damping = cue.damping   # cômodo mobiliado/em uso → seco; vazio → eco
         # distância: a MAIS distante entre a do modelo e a do próprio SFX ("ao longe"),
         # para o rótulo do autor e a perspectiva de cômodo não se cancelarem.
         distance = cue.distance
@@ -235,11 +249,24 @@ class Orquestrador:
         ib = self._DIST_ORDER.index(cb) if cb in self._DIST_ORDER else 1
         return ca if ia >= ib else cb
 
+    def _emotion_pauses(self, ev) -> tuple[int, int]:
+        """(pausa_antes, pausa_depois) em ms da emoção da fala — o respiro dramático.
+        Só para eventos de fala (com `.voice`); SFX/ambiência não têm."""
+        voice = getattr(ev, "voice", None)
+        if voice is None:
+            return 0, 0
+        shift = self.emotion.resolve(getattr(voice, "emotion", "neutro"),
+                                     getattr(voice, "intensity", 0.0))
+        return shift.pause_before_ms, shift.pause_after_ms
+
     def _gain_of(self, ev) -> float:
-        """Ganho de dinâmica do evento: por tensão (fala, coerente c/ o TTS) ou o
-        ganho fixo do próprio evento (SFX)."""
+        """Ganho de dinâmica do evento: por tensão + EMOÇÃO (fala, coerente c/ o TTS) ou
+        o ganho fixo do próprio evento (SFX)."""
         if hasattr(ev, "voice"):
-            return self.prosody.resolve(ProsodyPolicy.tension_scalar(ev.voice.tension)).gain_db
+            return self.prosody.resolve(
+                ProsodyPolicy.tension_scalar(ev.voice.tension),
+                emotion=getattr(ev.voice, "emotion", "neutro"),
+                intensity=getattr(ev.voice, "intensity", 0.0)).gain_db
         return float(getattr(ev, "gain_db", 0.0))
 
     # ------------------------------------------------------------------ #

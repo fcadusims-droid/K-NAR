@@ -10,25 +10,22 @@ ambientacao: seco
 <!--
 TEMPLATE — 1ª PESSOA (o próprio protagonista conta a história).
 
-A diferença que o K-NAR faz vs. 3ª pessoa:
-  • A narração É o protagonista falando ("eu entrei..."). No áudio ela usa a MESMA VOZ
-    do protagonista quando ele tem falas, e — por ele estar DENTRO da cena — pega o
-    ECO do cômodo em que ele está (não é seca como o narrador onisciente). Você está
-    ouvindo a história pelos ouvidos dele.
-  • Diga quem é o protagonista no front-matter ('protagonista: Nome') para casar a voz
-    da narração com a das falas dele. Sem isso, o K-NAR usa uma voz de 1ª pessoa
-    neutra (ainda distinta do narrador de 3ª pessoa).
-  • O resto é igual ao modelo de 3ª pessoa: "aspas" viram diálogo; a voz de cada
-    personagem sai da descrição (idade/gênero/timbre); cômodos montam o "set virtual"
-    (o eco te acompanha ao andar pela casa); verbos/sons viram efeitos e ambiência.
-
-Dica: o K-NAR também detecta a pessoa sozinho ('pessoa: auto') contando "eu/meu" vs
-"ele/ela" na narração — mas fixar 'pessoa: primeira' é mais garantido.
+O que muda vs. 3ª pessoa:
+  • A narração É o protagonista — usa a MESMA voz das falas dele e, por estar DENTRO
+    da cena, ganha o eco do cômodo onde ele está. Diga 'protagonista: Nome'.
+  • As falas do protagonista podem vir sem nome ("gritei", "murmurei") — o K-NAR
+    reconhece a 1ª pessoa e usa a voz dele. Os OUTROS personagens, nomeie na atribuição.
+O resto é igual ao modelo de 3ª pessoa (um cômodo por frase, móveis = seco,
+verbos+emoção = atuação, descreva cada personagem). Veja docs/TEMPLATE.md.
 Apague estes comentários antes de gerar (ou deixe — são ignorados).
 -->
 
-Eu empurrei a porta da cozinha e as tábuas rangeram sob as minhas botas. Meu coração batia forte. "Tem alguém em casa?", chamei, e a minha voz morreu abafada entre as paredes.
+Eu empurrei a porta e entrei no meu escritório. A sala estava do jeito de sempre: a escrivaninha cheia de papéis, a estante lotada de livros, o tapete gasto. "Tem alguém aqui?", chamei, meio sem jeito.
 
-Ninguém respondeu. Atravessei o corredor estreito até a sala grande, onde o relógio batia devagar, e senti a minha própria voz se espalhar pelo salão vazio. Lá fora, um trovão rolou.
+Ninguém respondeu. Meu coração batia forte. Passei para o corredor estreito, os passos abafados na madeira.
 
-Abri a porta dos fundos e saí para o quintal. O vento soprava aberto, sem eco nenhum. "Chega de me esconder", murmurei para a noite.
+Cheguei ao porão vazio, de paredes nuas e frias. Minha voz ecoou no concreto quando falei. "Eu sei que você desceu aqui."
+
+Então o velho Aurélio respondeu da escuridão, com a voz rouca: "Demorou, menino." Um trovão rolou lá fora.
+
+"Você me assustou", murmurei, aliviado. "Pensei que fosse outra pessoa."
