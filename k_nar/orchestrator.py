@@ -13,6 +13,7 @@ from __future__ import annotations
 from k_nar.models import EntryType, Scene, Track
 from k_nar.prosody import ProsodyPolicy
 from k_nar.proximity import ProximityPolicy
+from k_nar.space import SceneModel, SpacePolicy
 from k_nar.timeline import Placement, Timeline, TimingPolicy
 from k_nar.tts.base import RenderedClip, TTSBackend
 
@@ -28,7 +29,10 @@ def _track_of(ev) -> str:
 class Orquestrador:
     def __init__(self, tts: TTSBackend, policy: TimingPolicy | None = None,
                  prosody: ProsodyPolicy | None = None,
-                 proximity: ProximityPolicy | None = None):
+                 proximity: ProximityPolicy | None = None,
+                 scene_model: SceneModel | None = None,
+                 space_policy: SpacePolicy | None = None,
+                 spatial_narration: bool = False):
         self.tts = tts
         self.policy = policy or TimingPolicy()
         # mesma matriz de prosódia do backend neural: o ganho de dinâmica na EDL
@@ -36,6 +40,23 @@ class Orquestrador:
         self.prosody = prosody or ProsodyPolicy()
         # matriz distância → acústica (nível/abafamento/largura) dos SFX.
         self.proximity = proximity or ProximityPolicy()
+        # Nível 1 (modo espacial, OPCIONAL): o "set virtual" de zonas. Quando dado (e
+        # não-trivial), a acústica de cada evento é DERIVADA do modelo — reverb do
+        # cômodo do ouvinte + oclusão da parede + distância — em vez de rótulos à mão.
+        self.scene_model = scene_model
+        self.space = space_policy or SpacePolicy()
+        # Em 1ª pessoa a narração É o protagonista, DENTRO da cena: leva o reverb do
+        # cômodo (espacializada). Em 3ª pessoa o narrador é onisciente (seco) e fica de
+        # fora do palco. Este flag liga a narração no palco espacial.
+        self.spatial_narration = spatial_narration
+
+    @property
+    def _spatial(self) -> bool:
+        return self.scene_model is not None and not self.scene_model.is_trivial()
+
+    def _spatial_tracks(self) -> tuple[str, ...]:
+        base = (Track.DIALOGUE.value, Track.SFX.value)
+        return base + (Track.NARRATION.value,) if self.spatial_narration else base
 
     # ------------------------------------------------------------------ #
     def render_scene(self, scene: Scene,
@@ -94,8 +115,14 @@ class Orquestrador:
                 gain_db=self._gain_of(ev),
             )
 
-            # Distância (só SFX): "ao longe" -> mais baixo, abafado e mais central.
-            if cur_track == Track.SFX.value:
+            # Acústica ESPACIAL (Nível 1): quando há um "set virtual" de zonas, a
+            # distância/abafamento/reverb saem do modelo (cômodo do ouvinte × cômodo da
+            # fonte) — para o diálogo e o SFX (e a narração, só em 1ª pessoa, quando ela
+            # É o protagonista dentro da cena). O narrador ONISCIENTE (3ª pessoa) fica de
+            # fora do palco. Sem modelo: distância só do rótulo do SFX (modo clássico).
+            if self._spatial and cur_track in self._spatial_tracks():
+                self._apply_spatial(placement, ev, cur_track)
+            elif cur_track == Track.SFX.value:
                 self._apply_proximity(placement, getattr(ev, "distance", "media"))
 
             # Interrupção: esta fala SOBE sobre a cauda da anterior ("swell") e
@@ -151,14 +178,41 @@ class Orquestrador:
         )
 
     # ------------------------------------------------------------------ #
+    _DIST_ORDER = ("perto", "media", "longe", "muito_longe")
+
     def _apply_proximity(self, p: Placement, distance: str) -> None:
         """Grava na EDL a acústica da distância: ganho, pan (mais central quando longe)
         e o corte de passa-baixa (abafamento). O renderer só aplica."""
         prox = self.proximity.resolve(distance)
-        p.distance = distance
+        p.distance = self.proximity.canonical(distance)
         p.gain_db += prox.gain_db
         p.pan = int(max(-100, min(100, round(p.pan * prox.pan_scale))))
         p.lowpass_hz = prox.lowpass_hz
+
+    def _apply_spatial(self, p: Placement, ev, track: str) -> None:
+        """Deriva a acústica do evento do `SceneModel`: o reverb do cômodo do OUVINTE,
+        a distância (mesma zona × outra) e a OCLUSÃO (a parede abafa e derruba o nível —
+        é o som que "vem do cômodo ao lado"). Tudo vira dado na EDL; o renderer aplica."""
+        cue = self.scene_model.cue(ev.id)
+        if cue.space and cue.space != "seco":
+            p.space = cue.space
+        # distância: a MAIS distante entre a do modelo e a do próprio SFX ("ao longe"),
+        # para o rótulo do autor e a perspectiva de cômodo não se cancelarem.
+        distance = cue.distance
+        if track == Track.SFX.value:
+            distance = self._farther(distance, getattr(ev, "distance", "media"))
+        self._apply_proximity(p, distance)
+        # oclusão: soma o abafamento/atenuação da parede ao que a distância já fez.
+        lp, gain_db = self.space.resolve(cue.occlusion)
+        if lp > 0:
+            p.lowpass_hz = lp if p.lowpass_hz <= 0 else min(p.lowpass_hz, lp)
+        p.gain_db += gain_db
+
+    def _farther(self, a: str, b: str) -> str:
+        ca, cb = self.proximity.canonical(a), self.proximity.canonical(b)
+        ia = self._DIST_ORDER.index(ca) if ca in self._DIST_ORDER else 1
+        ib = self._DIST_ORDER.index(cb) if cb in self._DIST_ORDER else 1
+        return ca if ia >= ib else cb
 
     def _gain_of(self, ev) -> float:
         """Ganho de dinâmica do evento: por tensão (fala, coerente c/ o TTS) ou o

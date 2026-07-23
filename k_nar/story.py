@@ -41,6 +41,11 @@ class Story:
     lang: str = "pt"
     narrator: bool = True
     ambiance: str = "seco"
+    # PESSOA narrativa: "auto" (detecta pela narração), "primeira" (o protagonista
+    # conta — narração na voz dele, dentro da cena) ou "terceira" (narrador onisciente).
+    person: str = "auto"
+    # Em 1ª pessoa, o personagem que narra (opcional): a narração usa a MESMA voz dele.
+    protagonist: str = ""
 
     @property
     def scene_id(self) -> str:
@@ -107,9 +112,12 @@ def parse_story(text: str, *, default_lang: str = "pt", default_narrator: bool =
     narrator = _parse_bool(meta.get("narrador", meta.get("narrator", "")),
                            default_narrator)
     ambiance = meta.get("ambientacao", meta.get("ambiance", meta.get("cenario", "seco")))
+    person = meta.get("pessoa", meta.get("person", meta.get("narracao", "auto")))
+    protagonist = meta.get("protagonista", meta.get("protagonist", ""))
     ttl = meta.get("titulo", meta.get("title", "")) or title or "historia"
     return Story(title=ttl, prose=strip_markdown(body), lang=lang,
-                 narrator=narrator, ambiance=ambiance)
+                 narrator=narrator, ambiance=ambiance, person=person,
+                 protagonist=protagonist)
 
 
 def load_story(path: str | Path, **overrides) -> Story:

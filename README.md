@@ -94,12 +94,31 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **Ducking sidechain** no `_combine_tracks`: ambiência/SFX afundam sob a fala e voltam
   quando ela pára — a mixagem que impede a cacofonia. O `duck_db` controla a profundidade.
 
-**Espacialização (`k_nar/proximity.py`, `render/impulse.py`):**
+**Espacialização (`k_nar/proximity.py`, `k_nar/space/`, `render/impulse.py`):**
 
 - **Distância** (`ProximityPolicy`): "tiros ao longe" = baixo, abafado (passa-baixa) e
   central; "à queima-roupa" = alto e largo — detectado da prosa.
 - **Espaço** (presets de IR): "galpão vazio / catedral / caverna" → a voz ganha o eco do
   lugar (reverb convolutivo por cena), detectado da prosa ou fixo no front-matter.
+- **"Set virtual" de zonas** (`SceneModel`, Nível 1): quando a prosa passa por **2+
+  cômodos**, o K-NAR monta um **mapa da casa** (cômodos + portas). O **reverb segue o
+  POV** de cômodo em cômodo, e uma voz do **cômodo ao lado** soa **abafada** (oclusão:
+  a parede come os agudos e derruba o nível). A acústica é **derivada do modelo**, não
+  de rótulos à mão. A/B real: `scripts/ab_spatial.py` (oclusão −95% de agudos entre
+  cômodos; cauda de reverb varia 6× mais por cômodo, sem regressão de mix).
+
+**Elenco de vozes por aparência (`k_nar/casting.py`):**
+
+- O K-NAR **infere idade/gênero/timbre** de cada personagem dos **descritores** na prosa
+  ("o velho de voz rouca" → grave e lento; "a menina" → agudo e ágil) e escolhe a voz
+  (pitch/ritmo sobre o modelo base). Sem descritor → voz neutra; o gênero vem do texto,
+  nunca de adivinhar pelo nome.
+
+**Pessoa narrativa (`k_nar/narrative/person.py`):**
+
+- **3ª pessoa** — narrador onisciente, voz própria e **seca** (fora da cena). **1ª pessoa**
+  — a narração É o protagonista: **mesma voz** das falas dele e **dentro da cena** (leva o
+  eco do cômodo). Detectado da narração (`pessoa: auto`) ou fixo no front-matter.
 
 Roadmap em [`docs/ROADMAP.md`](docs/ROADMAP.md); detalhes das fases em
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -113,14 +132,19 @@ scripts/setup.sh                     # deps (numpy + pedalboard + piper + onnx) 
 scripts/download_lang.sh en          # (opcional) voz de outro idioma: en | es
 
 python -m k_nar examples/historia_template.md          # -> examples/historia_template.wav
+python -m k_nar examples/casa_de_madeira.md            # anda por 4 cômodos (espacial)
 python -m k_nar minha_historia.md -o audiobook.wav
 python -m k_nar minha_historia.md --sem-narrador       # modo radiodrama (só vozes + sons)
+python -m k_nar minha_historia.md --pessoa primeira    # narração na voz do protagonista
+python -m k_nar minha_historia.md --sem-espaco         # desliga o reverb por cômodo
 python -m k_nar minha_historia.md --idioma en          # pt | en | es (sobrescreve o front-matter)
 python -m k_nar minha_historia.md --sons sounds/       # samples reais (sounds/manifest.json)
 ```
 
-O front-matter define título, idioma, narrador (sim/não) e ambientação; nada é
-obrigatório (um `.md` só com prosa funciona). Multi-idioma: **pt / en / es**.
+O front-matter define título, idioma, narrador (sim/não), **pessoa** (1ª/3ª) e
+ambientação; nada é obrigatório (um `.md` só com prosa funciona). Modelos prontos:
+`examples/template_terceira_pessoa.md` e `examples/template_primeira_pessoa.md`.
+Multi-idioma: **pt / en / es**.
 
 ## Interface web (GitHub Pages + Actions)
 

@@ -27,6 +27,16 @@ class Lexicon:
     near_words: frozenset[str] = field(default_factory=frozenset)
     # palavras que revelam o ESPAÇO acústico → preset de reverb ("galpão" → galpao_vazio).
     space_triggers: dict[str, str] = field(default_factory=dict)
+    # CÔMODOS → preset de reverb, p/ o "set virtual" de zonas (Nível 1). Quando o POV
+    # anda de um cômodo a outro, o reverb o segue ("cozinha"→quarto_pequeno, "sala"→
+    # sala_grande, "quintal"→seco/aberto). Mais amplo que space_triggers (que só pega o
+    # espaço dominante de uma cena única).
+    zone_triggers: dict[str, str] = field(default_factory=dict)
+    # PESSOA narrativa: pronomes que revelam se a história é em 1ª pessoa (o próprio
+    # personagem conta: "eu entrei") ou 3ª (um narrador conta: "ele entrou"). Contados
+    # SÓ na narração (o diálogo sempre tem "eu"). Ver narrative/person.py.
+    first_person: frozenset[str] = field(default_factory=frozenset)
+    third_person: frozenset[str] = field(default_factory=frozenset)
 
 
 # --------------------------------------------------------------------------- #
@@ -125,6 +135,23 @@ PT = Lexicon(
         "capela": "catedral", "caverna": "caverna", "gruta": "caverna",
         "tunel": "tunel", "banheiro": "banheiro",
     },
+    zone_triggers={
+        "cozinha": "quarto_pequeno", "sala": "sala_grande", "quarto": "quarto_pequeno",
+        "dormitorio": "quarto_pequeno", "escritorio": "quarto_pequeno", "cela": "quarto_pequeno",
+        "corredor": "corredor_estreito", "hall": "corredor_estreito", "saguao": "corredor_estreito",
+        "porao": "caverna", "adega": "caverna", "sotao": "quarto_pequeno",
+        "garagem": "galpao_vazio", "galpao": "galpao_vazio", "armazem": "galpao_vazio",
+        "celeiro": "galpao_vazio", "salao": "galpao_vazio", "hangar": "galpao_vazio",
+        "banheiro": "banheiro", "lavabo": "banheiro",
+        "quintal": "seco", "patio": "seco", "jardim": "seco", "rua": "seco",
+        "campo": "seco", "varanda": "seco", "alpendre": "seco", "terraco": "seco",
+        "igreja": "catedral", "catedral": "catedral", "capela": "catedral",
+        "caverna": "caverna", "gruta": "caverna", "tunel": "tunel",
+    },
+    first_person=frozenset({"eu", "meu", "minha", "meus", "minhas", "me", "mim",
+                            "comigo", "nos", "nossa", "nosso"}),
+    third_person=frozenset({"ele", "ela", "eles", "elas", "dele", "dela", "deles",
+                            "delas", "lhe"}),
 )
 
 # --------------------------------------------------------------------------- #
@@ -183,6 +210,21 @@ EN = Lexicon(
         "church": "catedral", "chapel": "catedral", "cave": "caverna", "cavern": "caverna",
         "tunnel": "tunel", "bathroom": "banheiro",
     },
+    zone_triggers={
+        "kitchen": "quarto_pequeno", "bedroom": "quarto_pequeno", "office": "quarto_pequeno",
+        "study": "quarto_pequeno", "cell": "quarto_pequeno", "attic": "quarto_pequeno",
+        "corridor": "corredor_estreito", "hallway": "corredor_estreito", "hall": "corredor_estreito",
+        "basement": "caverna", "cellar": "caverna", "garage": "galpao_vazio",
+        "warehouse": "galpao_vazio", "barn": "galpao_vazio", "hangar": "galpao_vazio",
+        "bathroom": "banheiro", "restroom": "banheiro",
+        "yard": "seco", "garden": "seco", "street": "seco", "field": "seco",
+        "porch": "seco", "balcony": "seco", "terrace": "seco",
+        "church": "catedral", "cathedral": "catedral", "chapel": "catedral",
+        "cave": "caverna", "cavern": "caverna", "tunnel": "tunel",
+    },
+    first_person=frozenset({"i", "me", "my", "mine", "myself", "we", "our", "us"}),
+    third_person=frozenset({"he", "she", "they", "him", "her", "his", "hers",
+                            "them", "their"}),
 )
 
 # --------------------------------------------------------------------------- #
@@ -236,6 +278,22 @@ ES = Lexicon(
         "catedral": "catedral", "iglesia": "catedral", "cueva": "caverna",
         "caverna": "caverna", "tunel": "tunel", "bano": "banheiro",
     },
+    zone_triggers={
+        "cocina": "quarto_pequeno", "sala": "sala_grande", "cuarto": "quarto_pequeno",
+        "habitacion": "quarto_pequeno", "dormitorio": "quarto_pequeno", "oficina": "quarto_pequeno",
+        "celda": "quarto_pequeno", "desvan": "quarto_pequeno",
+        "pasillo": "corredor_estreito", "corredor": "corredor_estreito",
+        "sotano": "caverna", "bodega": "caverna", "garaje": "galpao_vazio",
+        "almacen": "galpao_vazio", "granero": "galpao_vazio", "salon": "galpao_vazio",
+        "bano": "banheiro", "patio": "seco", "jardin": "seco", "calle": "seco",
+        "campo": "seco", "balcon": "seco", "terraza": "seco",
+        "iglesia": "catedral", "catedral": "catedral", "capilla": "catedral",
+        "cueva": "caverna", "caverna": "caverna", "tunel": "tunel",
+    },
+    # "el" (artigo) é ambíguo em ES → fora; usamos pronomes inequívocos de 3ª pessoa.
+    first_person=frozenset({"yo", "mi", "mis", "me", "conmigo", "mio", "mia",
+                            "nosotros", "nuestra", "nuestro"}),
+    third_person=frozenset({"ella", "ellos", "ellas", "le", "les", "suyo", "suya"}),
 )
 
 LEXICONS: dict[str, Lexicon] = {

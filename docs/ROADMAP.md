@@ -102,6 +102,32 @@ o pacing — mixado profissionalmente para um som não estragar o outro.
   calibrar mais o `LlamaDirector` (precisa do modelo); `NeuralSfxBackend`; sincronia
   fina SFX↔verbo via forced alignment sobre a narração.
 
+### Fase 7 — "Set virtual" acústico + elenco + pessoa narrativa ✅
+
+A visão do usuário: o motor construir um **modelo da cena** (o "set" — cômodos,
+quem está onde, por onde o POV anda) e **derivar** a acústica dele, como áudio de
+jogo (o som bate na parede e volta). A decisão consciente foi fazer a versão **por
+ZONAS** (leve, autorável, reaproveita o render) e **não** um simulador de física de
+raios (caro, frágil e quase inaudível em estéreo) — ver "Riscos honestos".
+
+* **Nível 1 — `SceneModel` (`k_nar/space/`)** ✅: grafo de zonas (cômodo → preset de
+  reverb) + adjacência (portas) + onde a fonte e o ouvinte estão a cada evento. Resolve
+  um `SpatialCue` por evento — reverb do cômodo do **ouvinte**, distância (mesma zona ×
+  outra) e **oclusão** (a parede, via `SpacePolicy`). Dado puro (stdlib): o Orquestrador
+  grava na EDL, o renderer aplica **reverb por-evento** (o eco segue o POV) e pula o
+  reverb global. O Screenwriter detecta os cômodos na prosa (o POV "anda" pela casa).
+* **A/B REAL** ✅ (`scripts/ab_spatial.py`, Piper + ESC-50): a espacialização **melhora**
+  de forma mensurável — voz do cômodo ao lado perde ~95% dos agudos e ~11 dB; a cauda
+  de reverb varia ~6× mais por cômodo (o quintal aberto fica seco, o salão ecoa), sem
+  regressão de clipping/QA. Ligada por padrão quando há 2+ cômodos (`--sem-espaco` desliga).
+* **Elenco por aparência (`k_nar/casting.py`)** ✅: infere idade/gênero/timbre dos
+  **descritores** na prosa e escolhe a voz (pitch/ritmo) por personagem — o velho grave e
+  lento, a menina aguda e ágil. Gênero vem do texto, nunca do nome (não "misgenera").
+* **Pessoa narrativa (`k_nar/narrative/person.py`)** ✅: 3ª pessoa = narrador onisciente
+  **seco** (fora da cena); 1ª pessoa = a narração É o protagonista (mesma voz, **dentro**
+  da cena, leva o reverb do cômodo). Detectada da narração ou fixa no front-matter, com
+  dois templates prontos (`examples/template_{primeira,terceira}_pessoa.md`).
+
 ## Caminho crítico
 
 Não pular direto para SFX. A ordem **0 → 1 → 3** é o caminho crítico: forced

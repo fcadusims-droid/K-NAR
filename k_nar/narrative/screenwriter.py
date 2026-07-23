@@ -97,11 +97,35 @@ class RuleBasedScreenwriter:
         last_id: str | None = None   # id do último elemento posicionável (âncora temporal)
         counter = 0
 
+        # "Set virtual" de zonas (Nível 1): o POV começa fora de qualquer cômodo e
+        # ENTRA num quando a prosa o menciona ("entrou na cozinha"). O reverb passa a
+        # seguir o POV pela casa. Cada elemento é ancorado à zona ATUAL do ouvinte.
+        zone_space: dict[str, str] = {}          # zona -> preset de reverb
+        zone_of_event: dict[str, str] = {}       # event_id -> zona (ouvinte=fonte no baseline)
+        zone_links: set = set()                  # pares de zonas que o POV percorreu (portas)
+        zone_order: list[str] = []               # ordem de visita (a 1ª é a zona padrão)
+        current_zone: str | None = None
+
+        def _enter(el_id: str) -> None:
+            if current_zone:
+                zone_of_event[el_id] = current_zone
+
         for sent in self._sentences(masked):
+            plain = _MASK_RE.sub(" ", sent)
+            zone = self._zone_of(plain, lex)          # (zona, preset) ou None
+            if zone:
+                zid, preset = zone
+                zone_space.setdefault(zid, preset)
+                if zid != current_zone:
+                    if current_zone is not None:
+                        zone_links.add(frozenset((current_zone, zid)))
+                    current_zone = zid
+                    if zid not in zone_order:
+                        zone_order.append(zid)
+
             ids = _MASK_RE.findall(sent)
             if ids:
-                attribution = _MASK_RE.sub(" ", sent)
-                speaker, cue = self._attribution(attribution, last_speaker, lex)
+                speaker, cue = self._attribution(plain, last_speaker, lex)
                 last_speaker = speaker
                 for qid in ids:
                     counter += 1
@@ -112,6 +136,7 @@ class RuleBasedScreenwriter:
                     if cue:
                         el["deixa"] = cue
                     elementos.append(el)
+                    _enter(el["id"])
                     last_id = el["id"]
                 continue
 
@@ -131,6 +156,7 @@ class RuleBasedScreenwriter:
                 if dist != "media":
                     el["distancia"] = dist
                 elementos.append(el)
+                _enter(el["id"])
                 acoes.append({"gatilho": sfx_tag, "texto": text, "ancora": f"sfx_{counter}"})
                 this_anchor = last_id = el["id"]
 
@@ -139,6 +165,7 @@ class RuleBasedScreenwriter:
                 counter += 1
                 nid = f"narr_{counter}"
                 elementos.append({"id": nid, "tipo": "narracao", "texto": text})
+                _enter(nid)
                 this_anchor = last_id = nid
 
             # Registra a menção da ambiência ancorada na posição desta frase.
@@ -169,8 +196,20 @@ class RuleBasedScreenwriter:
         if not ambiance or ambiance == "seco":
             final_ambiance = self._detect_space(prose, lex) or ambiance
 
-        return {"cena_id": scene_id, "ambientacao": final_ambiance,
-                "elementos": beds + elementos, "acoes": acoes}
+        out: dict[str, Any] = {"cena_id": scene_id, "ambientacao": final_ambiance,
+                               "elementos": beds + elementos, "acoes": acoes}
+
+        # "Set virtual" de zonas: só emite se há >=2 cômodos (senão espacializar não muda
+        # nada). O pipeline reconstrói o SceneModel disto e liga o modo espacial.
+        if len(zone_space) >= 2 and zone_of_event:
+            out["espaco"] = {
+                "zonas": [{"id": zid, "space": preset} for zid, preset in zone_space.items()],
+                "ligacoes": [sorted(pair) for pair in zone_links],
+                "ouvinte": dict(zone_of_event),
+                "fontes": dict(zone_of_event),   # baseline: fonte no mesmo cômodo do ouvinte
+                "zona_padrao": zone_order[0] if zone_order else "",
+            }
+        return out
 
     @staticmethod
     def _detect_space(prose: str, lex: Lexicon) -> str | None:
@@ -183,6 +222,19 @@ class RuleBasedScreenwriter:
             if preset:
                 counts[preset] = counts.get(preset, 0) + 1
         return max(counts, key=counts.get) if counts else None
+
+    @staticmethod
+    def _zone_of(text: str, lex: Lexicon) -> tuple[str, str] | None:
+        """Cômodo mencionado na frase → (id_da_zona, preset_de_reverb). O id é a
+        própria palavra normalizada (dois 'cozinha' = a mesma zona). None se nenhum."""
+        if not lex.zone_triggers:
+            return None
+        for w in _WORD_RE.findall(text):
+            key = _norm(w)
+            preset = lex.zone_triggers.get(key)
+            if preset:
+                return key, preset
+        return None
 
     # ------------------------------------------------------------------ #
     def _travessoes_para_aspas(self, prose: str, lex: Lexicon) -> str:

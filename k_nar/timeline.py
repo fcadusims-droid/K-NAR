@@ -156,6 +156,10 @@ class Placement:
     # resolveu (o ar come os agudos de longe). 0 = sem filtro. O renderer só aplica.
     distance: str = "media"
     lowpass_hz: float = 0.0
+    # Espaço acústico DESTE evento (modo espacial / Nível 1): o preset de reverb do
+    # cômodo do OUVINTE quando o evento toca. "" = sem reverb por-evento (o renderer
+    # usa o reverb global da cena). É o que faz o eco "seguir" o POV pela casa.
+    space: str = ""
 
     @property
     def end_ms(self) -> int:
