@@ -41,7 +41,8 @@ class LibrarySfxBackend:
     """Resolve tag → arquivo real de som. Satisfaz `SfxBackend`."""
 
     def __init__(self, manifest: dict[str, list[str] | str], sr: int = 22050,
-                 base_dir: str = "", fallback=None):
+                 base_dir: str = "", fallback=None, ambience_tags=None,
+                 sfx_max_s: float = 2.5):
         # normaliza: cada tag guarda uma lista de caminhos
         self.manifest: dict[str, list[str]] = {
             tag: ([paths] if isinstance(paths, str) else list(paths))
@@ -50,6 +51,13 @@ class LibrarySfxBackend:
         self.sr = sr
         self.base_dir = Path(base_dir) if base_dir else None
         self.fallback = fallback
+        # ambiência é textura (não trimar, o renderer faz loop); SFX pontual é trimado
+        # e limitado a `sfx_max_s` (clipes do ESC-50 têm 5s, muito com silêncio/cauda).
+        if ambience_tags is None:
+            from k_nar.sfx.catalog import AMBIENCE_TAGS
+            ambience_tags = AMBIENCE_TAGS
+        self.ambience_tags = set(ambience_tags)
+        self.sfx_max_s = sfx_max_s
 
     @property
     def backend_id(self) -> str:
@@ -65,6 +73,7 @@ class LibrarySfxBackend:
             path = self.base_dir / choice if self.base_dir else Path(choice)
             audio = self._load(path)
             if audio is not None and len(audio):
+                audio = self._condition(audio, tag)
                 return RenderedClip(
                     event_id=event.id,
                     duration_ms=int(round(1000 * len(audio) / self.sr)),
@@ -80,6 +89,21 @@ class LibrarySfxBackend:
                             samples=np.zeros(1, np.float32))
 
     # ------------------------------------------------------------------ #
+    def _condition(self, audio: np.ndarray, tag: str) -> np.ndarray:
+        """Prepara o sample para o mix: ambiência fica como está (textura p/ loop);
+        SFX pontual é trimado (tira o silêncio das bordas do clipe de 5s) e limitado.
+        Normaliza o pico p/ o nível ficar previsível (ESC-50 varia muito de volume)."""
+        from k_nar.render.dsp import peak_normalize, trim_silence
+        if tag not in self.ambience_tags:
+            trimmed, _, _ = trim_silence(audio, threshold_db=-35.0, keep_ms=20.0, sr=self.sr)
+            if len(trimmed):
+                audio = trimmed
+            cap = int(self.sfx_max_s * self.sr)
+            if len(audio) > cap:
+                audio = audio[:cap]
+        # peak_normalize opera em (canais, N); passamos mono como (1, N) e achatamos
+        return peak_normalize(audio[None, :], target=0.9)[0]
+
     def _load(self, path: Path) -> np.ndarray | None:
         """Carrega áudio como mono float32 na taxa da cena. None se falhar."""
         if not path.exists():

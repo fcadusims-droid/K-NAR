@@ -19,3 +19,5 @@ build_audio/
 models/**
 !models/README.md
 .DS_Store
+sounds/
+*.mp3

@@ -160,18 +160,55 @@ def _crowd(sr, dur, rng):
                  (0.6 + 0.4 * np.sin(2 * np.pi * 0.7 * np.arange(n) / sr)).astype(np.float32))
 
 
-# tag -> (gerador, duração padrão em s)
+# --- Eletrônicos (o ESC-50 não cobre; síntese faz melhor) ---
+def _radio_static(sr, dur, rng):
+    n = int(sr * dur)
+    hiss = _highpass(_noise(n, rng), 0.35)  # chiado brilhante
+    # "respiração" do sinal: ondulação lenta de amplitude (dial à deriva)
+    breath = 0.7 + 0.3 * np.sin(2 * np.pi * 0.3 * np.arange(n) / sr)
+    return _peaknorm(hiss * breath.astype(np.float32))
+
+
+def _transformer(sr, dur, rng):
+    n = int(sr * dur)
+    t = np.arange(n) / sr
+    hum = sum(a * np.sin(2 * np.pi * f * t)
+              for f, a in ((60, 1.0), (120, 0.6), (180, 0.35), (240, 0.2)))
+    return _peaknorm(hum.astype(np.float32) + 0.08 * _noise(n, rng))  # zunido da rede
+
+
+def _dial_tone(sr, dur, rng):
+    n = int(sr * dur)
+    return _peaknorm(0.8 * np.sin(2 * np.pi * 425 * np.arange(n) / sr).astype(np.float32))
+
+
+def _busy_signal(sr, dur, rng):
+    n = int(sr * dur)
+    t = np.arange(n) / sr
+    tone = np.sin(2 * np.pi * 425 * t).astype(np.float32)
+    gate = ((t * 2.0) % 1.0 < 0.5).astype(np.float32)   # 250ms liga / 250ms desliga
+    return _peaknorm(tone * gate)
+
+
+def _beep(sr, dur, rng):
+    n = int(sr * dur)
+    return _peaknorm(np.sin(2 * np.pi * 1000 * np.arange(n) / sr).astype(np.float32) * _exp_env(n, 3.0))
+
+
+# tag -> (gerador, duração padrão em s). É o conjunto de FALLBACK (síntese): cobre
+# tudo que a biblioteca real (ESC-50) pode não ter — em especial os eletrônicos.
 _SFX = {
     "tiro": (_gun, 0.5), "explosao": (_explosion, 1.4), "batida": (_impact, 0.4),
     "vidro_quebra": (_glass, 0.7), "trovao": (_thunder, 2.2),
     "passos": (lambda sr, d, r: _footsteps(sr, d, r, False), 1.6),
     "passos_poca": (lambda sr, d, r: _footsteps(sr, d, r, True), 1.6),
     "porta_range": (_door_creak, 1.3), "sirene": (_siren, 2.0), "alarme": (_siren, 2.0),
+    "tom_discagem": (_dial_tone, 2.0), "linha_ocupada": (_busy_signal, 2.0), "bipe": (_beep, 0.3),
 }
 _AMBIENCE = {
     "floresta_noite": (_forest_night, 4.0), "chuva": (_rain, 4.0),
     "vento": (_wind, 4.0), "motor": (_engine, 4.0), "multidao": (_crowd, 4.0),
-    "cidade": (_crowd, 4.0),
+    "cidade": (_crowd, 4.0), "estatica": (_radio_static, 4.0), "transformador": (_transformer, 4.0),
 }
 
 

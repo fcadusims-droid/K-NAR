@@ -149,6 +149,10 @@ class Placement:
     # já ancorou numa fronteira REAL de fonema via forced alignment). Quando é
     # "fonema:*", cut_snap_window_ms=0 e o renderer aplica o corte direto.
     cut_method: str = ""
+    # Distância do som (só SFX): rótulo + o corte de passa-baixa que o `ProximityPolicy`
+    # resolveu (o ar come os agudos de longe). 0 = sem filtro. O renderer só aplica.
+    distance: str = "media"
+    lowpass_hz: float = 0.0
 
     @property
     def end_ms(self) -> int:

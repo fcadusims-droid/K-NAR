@@ -88,9 +88,18 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 - `SfxBackend` (espelha `TTSBackend`): `LibrarySfxBackend` (samples **reais** por tag,
   baseline de produção) e `ProceduralSfxBackend` (síntese, stand-in runnable).
+- **Biblioteca real**: `scripts/download_sfx.py` baixa o ESC-50 (50 categorias de som)
+  **ciente de licença** (prefere CC0/CC-BY). Catálogo de ~55 sons em `k_nar/sfx/catalog.py`.
 - `SfxEvent` / `AmbienceEvent` — som pontual (foley, ancora a fala p/ reagir) e cama.
 - **Ducking sidechain** no `_combine_tracks`: ambiência/SFX afundam sob a fala e voltam
   quando ela pára — a mixagem que impede a cacofonia. O `duck_db` controla a profundidade.
+
+**Espacialização (`k_nar/proximity.py`, `render/impulse.py`):**
+
+- **Distância** (`ProximityPolicy`): "tiros ao longe" = baixo, abafado (passa-baixa) e
+  central; "à queima-roupa" = alto e largo — detectado da prosa.
+- **Espaço** (presets de IR): "galpão vazio / catedral / caverna" → a voz ganha o eco do
+  lugar (reverb convolutivo por cena), detectado da prosa ou fixo no front-matter.
 
 Roadmap em [`docs/ROADMAP.md`](docs/ROADMAP.md); detalhes das fases em
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

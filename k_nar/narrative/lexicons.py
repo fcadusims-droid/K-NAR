@@ -5,8 +5,8 @@ o que MUDA por idioma é o vocabulário: os verbos de fala que revelam o locutor
 deixa, e as palavras que disparam SFX/ambiência. Cada idioma traz um `Lexicon`; as
 CHAVES já vêm normalizadas (sem acento, minúsculas) porque o lookup usa `strip_accents`.
 
-As TAGS de som são compartilhadas entre idiomas (o mesmo `tiro`/`floresta_noite` da
-biblioteca), então só o gatilho (a palavra) muda — "tiro"/"shot"/"disparo" → `tiro`.
+As TAGS de som são as do catálogo (`k_nar/sfx/catalog.py`), compartilhadas entre
+idiomas — só o gatilho (a palavra) muda: "tiro"/"shot"/"disparo" → `tiro`.
 """
 
 from __future__ import annotations
@@ -22,6 +22,11 @@ class Lexicon:
     not_names: frozenset[str]
     sfx_triggers: dict[str, str] = field(default_factory=dict)
     ambience_triggers: dict[str, str] = field(default_factory=dict)
+    # palavras que revelam a DISTÂNCIA do som na frase ("ao longe", "perto").
+    far_words: frozenset[str] = field(default_factory=frozenset)
+    near_words: frozenset[str] = field(default_factory=frozenset)
+    # palavras que revelam o ESPAÇO acústico → preset de reverb ("galpão" → galpao_vazio).
+    space_triggers: dict[str, str] = field(default_factory=dict)
 
 
 # --------------------------------------------------------------------------- #
@@ -29,35 +34,96 @@ class Lexicon:
 # --------------------------------------------------------------------------- #
 PT = Lexicon(
     speech_verbs=frozenset({
+        # passado
         "disse", "falou", "perguntou", "respondeu", "gritou", "berrou", "exclamou",
         "sussurrou", "murmurou", "retrucou", "indagou", "replicou", "ordenou",
         "questionou", "afirmou", "declarou", "avisou", "alertou", "gaguejou",
         "cochichou", "bradou", "vociferou", "resmungou", "pediu", "insistiu",
-        "continuou", "concluiu", "acrescentou", "completou", "chamou",
+        "continuou", "concluiu", "acrescentou", "completou", "chamou", "comentou",
+        # presente (narração no presente é comum na literatura em PT)
+        "diz", "fala", "pergunta", "responde", "grita", "berra", "exclama",
+        "sussurra", "murmura", "retruca", "indaga", "replica", "ordena", "pede",
+        "insiste", "continua", "conclui", "acrescenta", "completa", "chama",
+        "comenta", "resmunga", "brada", "avisa", "alerta", "cochicha", "gagueja",
     }),
-    loud_verbs=frozenset({"gritou", "berrou", "exclamou", "bradou", "vociferou", "ordenou", "alertou"}),
-    soft_verbs=frozenset({"sussurrou", "murmurou", "cochichou", "gaguejou", "resmungou"}),
+    loud_verbs=frozenset({
+        "gritou", "berrou", "exclamou", "bradou", "vociferou", "ordenou", "alertou",
+        "grita", "berra", "exclama", "brada", "ordena", "alerta",
+    }),
+    soft_verbs=frozenset({
+        "sussurrou", "murmurou", "cochichou", "gaguejou", "resmungou",
+        "sussurra", "murmura", "cochicha", "gagueja", "resmunga",
+    }),
     not_names=frozenset({
         "a", "o", "e", "ele", "ela", "eles", "elas", "entao", "mas", "quando",
         "de", "do", "da", "no", "na", "com", "por", "que", "um", "uma", "os", "as",
         "seu", "sua", "isso", "aquilo", "aquele", "aquela", "depois", "antes",
     }),
     sfx_triggers={
+        # portas / impacto (o SOM vem do VERBO — "porta" sozinha é objeto, não som)
         "rangeu": "porta_range", "range": "porta_range", "rangendo": "porta_range",
-        "explodiu": "explosao", "explosao": "explosao", "estourou": "explosao",
-        "bateu": "batida", "batida": "batida", "socou": "batida",
+        "ranger": "porta_range", "rangido": "porta_range", "bateu": "batida",
+        "pancada": "batida", "socou": "batida", "martelou": "batida", "batendo": "batida",
+        # passos
+        "passos": "passos", "pisou": "passos", "pisadas": "passos", "poca": "passos_poca",
+        # vidro / armas / explosão
         "estilhacou": "vidro_quebra", "quebrou": "vidro_quebra",
-        "trovejou": "trovao", "trovao": "trovao", "raio": "trovao",
-        "disparou": "tiro", "tiro": "tiro", "tiros": "tiro", "atirou": "tiro",
-        "passos": "passos", "pisou": "passos", "poca": "passos_poca", "poça": "passos_poca",
-        "sirene": "sirene", "alarme": "alarme",
+        "despedacou": "vidro_quebra", "tiro": "tiro", "tiros": "tiro", "disparo": "tiro",
+        "disparou": "tiro", "atirou": "tiro", "pistola": "tiro", "revolver": "tiro",
+        "explosao": "explosao", "explodiu": "explosao", "estourou": "explosao",
+        "detonou": "explosao", "bomba": "explosao", "fogos": "fogos", "rojao": "fogos",
+        # natureza pontual
+        "trovao": "trovao", "trovejou": "trovao", "raio": "trovao", "relampago": "trovao",
+        "pingo": "pingo", "pingou": "pingo", "gotejou": "pingo", "gota": "pingo",
+        "gotejando": "pingo", "torneira": "pingo", "derramou": "agua_derramando",
+        "jorrou": "agua_derramando", "despejou": "agua_derramando",
+        # eletrônico / sinais
+        "sirene": "sirene", "alarme": "alarme", "sino": "sino", "sinos": "sino",
+        "badalada": "sino", "badalou": "sino", "chiado": "estatica", "chiou": "estatica",
+        "estatica": "estatica", "interferencia": "estatica", "discagem": "tom_discagem",
+        "ocupado": "linha_ocupada", "bipe": "bipe", "bip": "bipe",
+        # objetos / foley
+        "teclado": "teclado", "digitou": "teclado", "datilografou": "teclado",
+        "descarga": "descarga", "lata": "lata_abrindo", "buzina": "buzina", "buzinou": "buzina",
+        # animais (pontuais)
+        "cachorro": "cachorro", "cao": "cachorro", "latido": "cachorro", "latiu": "cachorro",
+        "latindo": "cachorro", "gato": "gato", "miou": "gato", "corvo": "corvo",
+        "grasnou": "corvo", "galo": "galo", "galinha": "galinha", "cacarejou": "galinha",
+        "vaca": "vaca", "mugiu": "vaca", "porco": "porco", "grunhiu": "porco",
+        "ovelha": "ovelha", "balou": "ovelha", "coaxou": "ra", "sapo": "ra",
+        # humano não-verbal
+        "tossiu": "tosse", "tosse": "tosse", "espirro": "espirro", "espirrou": "espirro",
+        "roncou": "ronco", "ronco": "ronco", "palmas": "palmas", "aplausos": "palmas",
+        "aplaudiu": "palmas", "risada": "risada", "gargalhou": "risada", "gargalhada": "risada",
+        # máquinas
+        "motosserra": "motosserra", "serrote": "serra", "aviao": "aviao", "jato": "aviao",
+        "trem": "trem", "locomotiva": "trem",
     },
     ambience_triggers={
-        "floresta": "floresta_noite", "mata": "floresta_noite", "selva": "floresta_noite",
+        "grilos": "grilos", "grilo": "grilos", "floresta": "floresta_noite",
+        "mata": "floresta_noite", "selva": "floresta_noite", "bosque": "floresta_noite",
+        "insetos": "insetos", "cigarras": "insetos", "cigarra": "insetos",
         "chuva": "chuva", "chovia": "chuva", "chovendo": "chuva", "temporal": "chuva",
-        "vento": "vento", "ventania": "vento", "brisa": "vento",
-        "motor": "motor", "motores": "motor", "zumbido": "motor", "nave": "motor",
-        "cidade": "cidade", "multidao": "multidao", "praca": "multidao",
+        "aguaceiro": "chuva", "tempestade": "tempestade",
+        "vento": "vento", "ventania": "vento", "brisa": "vento", "ventava": "vento",
+        "mar": "oceano", "oceano": "oceano", "ondas": "oceano", "maresia": "oceano",
+        "fogo": "fogo", "fogueira": "fogo", "chamas": "fogo", "lareira": "fogo",
+        "crepitava": "fogo", "motor": "motor", "motores": "motor", "zumbido": "motor",
+        "nave": "motor", "gerador": "motor", "zunido": "transformador",
+        "transformador": "transformador", "transito": "cidade",
+        "multidao": "multidao", "plateia": "multidao", "torcida": "multidao",
+        "passaros": "passaros", "helicoptero": "helicoptero", "aspirador": "aspirador",
+        "relogio": "relogio", "tiquetaque": "relogio",
+    },
+    far_words=frozenset({"longe", "distante", "distancia", "afastado", "remoto",
+                         "lonjura", "horizonte", "distantes", "alem"}),
+    near_words=frozenset({"perto", "proximo", "junto", "rente", "colado", "pertinho",
+                          "ladinho", "adiante"}),
+    space_triggers={
+        "galpao": "galpao_vazio", "armazem": "galpao_vazio", "hangar": "galpao_vazio",
+        "salao": "galpao_vazio", "catedral": "catedral", "igreja": "catedral",
+        "capela": "catedral", "caverna": "caverna", "gruta": "caverna",
+        "tunel": "tunel", "banheiro": "banheiro",
     },
 )
 
@@ -79,21 +145,43 @@ EN = Lexicon(
         "before", "so", "as", "at", "in", "on",
     }),
     sfx_triggers={
-        "creaked": "porta_range", "creak": "porta_range", "creaking": "porta_range",
-        "exploded": "explosao", "explosion": "explosao", "blast": "explosao",
-        "banged": "batida", "bang": "batida", "knock": "batida", "knocked": "batida",
-        "shattered": "vidro_quebra", "smashed": "vidro_quebra", "broke": "vidro_quebra",
-        "thunder": "trovao", "thundered": "trovao", "lightning": "trovao",
-        "gunshot": "tiro", "shot": "tiro", "fired": "tiro", "gunfire": "tiro",
+        "creaked": "porta_range", "creak": "porta_range",
+        "creaking": "porta_range", "banged": "batida",
+        "bang": "batida", "knock": "batida", "knocked": "batida", "pounded": "batida",
         "footsteps": "passos", "steps": "passos", "puddle": "passos_poca",
-        "siren": "sirene", "alarm": "alarme",
+        "shattered": "vidro_quebra", "smashed": "vidro_quebra",
+        "gunshot": "tiro", "shot": "tiro", "fired": "tiro", "gunfire": "tiro", "pistol": "tiro",
+        "exploded": "explosao", "explosion": "explosao", "blast": "explosao", "bomb": "explosao",
+        "fireworks": "fogos", "thunder": "trovao", "thundered": "trovao", "lightning": "trovao",
+        "drip": "pingo", "dripped": "pingo", "dripping": "pingo", "faucet": "pingo",
+        "siren": "sirene", "alarm": "alarme", "bell": "sino", "bells": "sino", "tolled": "sino",
+        "static": "estatica", "interference": "estatica", "dial": "tom_discagem", "beep": "bipe",
+        "keyboard": "teclado", "typing": "teclado", "typewriter": "teclado", "horn": "buzina",
+        "dog": "cachorro", "barked": "cachorro", "barking": "cachorro", "cat": "gato",
+        "meowed": "gato", "crow": "corvo", "rooster": "galo", "cow": "vaca", "mooed": "vaca",
+        "coughed": "tosse", "cough": "tosse", "sneezed": "espirro", "snored": "ronco",
+        "clapped": "palmas", "applause": "palmas", "laughed": "risada", "laughter": "risada",
+        "chainsaw": "motosserra", "airplane": "aviao", "plane": "aviao", "train": "trem",
     },
     ambience_triggers={
-        "forest": "floresta_noite", "woods": "floresta_noite", "jungle": "floresta_noite",
-        "rain": "chuva", "raining": "chuva", "storm": "chuva",
-        "wind": "vento", "breeze": "vento", "gale": "vento",
-        "engine": "motor", "engines": "motor", "hum": "motor", "ship": "motor",
-        "city": "cidade", "crowd": "multidao", "ocean": "oceano", "waves": "oceano", "sea": "oceano",
+        "crickets": "grilos", "forest": "floresta_noite", "woods": "floresta_noite",
+        "jungle": "floresta_noite", "insects": "insetos", "cicadas": "insetos",
+        "rain": "chuva", "raining": "chuva", "storm": "tempestade", "downpour": "chuva",
+        "wind": "vento", "breeze": "vento", "gale": "vento", "ocean": "oceano",
+        "sea": "oceano", "waves": "oceano", "fire": "fogo", "campfire": "fogo",
+        "fireplace": "fogo", "flames": "fogo", "engine": "motor", "engines": "motor",
+        "hum": "motor", "ship": "motor", "generator": "motor", "buzz": "transformador",
+        "transformer": "transformador", "traffic": "cidade",
+        "crowd": "multidao", "birds": "passaros", "helicopter": "helicoptero",
+        "clock": "relogio",
+    },
+    far_words=frozenset({"far", "distant", "distance", "faraway", "afar", "remote",
+                         "horizon", "yonder"}),
+    near_words=frozenset({"near", "close", "nearby", "beside", "closeup"}),
+    space_triggers={
+        "warehouse": "galpao_vazio", "hangar": "galpao_vazio", "cathedral": "catedral",
+        "church": "catedral", "chapel": "catedral", "cave": "caverna", "cavern": "caverna",
+        "tunnel": "tunel", "bathroom": "banheiro",
     },
 )
 
@@ -102,10 +190,14 @@ EN = Lexicon(
 # --------------------------------------------------------------------------- #
 ES = Lexicon(
     speech_verbs=frozenset({
+        # pasado
         "dijo", "pregunto", "respondio", "grito", "susurro", "murmuro", "exclamo",
         "contesto", "replico", "ordeno", "afirmo", "declaro", "aviso", "advirtio",
         "balbuceo", "farfullo", "bramo", "rugio", "pidio", "insistio", "continuo",
         "anadio", "llamo", "chillo",
+        # presente
+        "dice", "pregunta", "responde", "grita", "susurra", "murmura", "exclama",
+        "contesta", "replica", "ordena", "pide", "insiste", "continua", "llama",
     }),
     loud_verbs=frozenset({"grito", "chillo", "exclamo", "bramo", "rugio", "ordeno", "advirtio"}),
     soft_verbs=frozenset({"susurro", "murmuro", "farfullo", "balbuceo"}),
@@ -116,20 +208,33 @@ ES = Lexicon(
     }),
     sfx_triggers={
         "crujio": "porta_range", "crujido": "porta_range",
-        "exploto": "explosao", "explosion": "explosao", "estallo": "explosao",
         "golpeo": "batida", "golpe": "batida", "toco": "batida",
-        "rompio": "vidro_quebra", "estallido": "vidro_quebra",
-        "trueno": "trovao", "rayo": "trovao", "relampago": "trovao",
-        "disparo": "tiro", "tiro": "tiro", "disparos": "tiro",
         "pasos": "passos", "charco": "passos_poca",
-        "sirena": "sirene", "alarma": "alarme",
+        "rompio": "vidro_quebra", "estallo": "explosao", "disparo": "tiro", "tiro": "tiro",
+        "disparos": "tiro", "pistola": "tiro", "explosion": "explosao", "bomba": "explosao",
+        "trueno": "trovao", "rayo": "trovao", "relampago": "trovao", "goteo": "pingo",
+        "gota": "pingo", "grifo": "pingo", "sirena": "sirene", "alarma": "alarme",
+        "campana": "sino", "campanas": "sino", "estatica": "estatica", "interferencia": "estatica",
+        "teclado": "teclado", "bocina": "buzina", "perro": "cachorro", "ladro": "cachorro",
+        "gato": "gato", "cuervo": "corvo", "gallo": "galo", "vaca": "vaca",
+        "toso": "tosse", "estornudo": "espirro", "ronco": "ronco", "aplausos": "palmas",
+        "risa": "risada", "avion": "aviao", "tren": "trem",
     },
     ambience_triggers={
-        "bosque": "floresta_noite", "selva": "floresta_noite",
-        "lluvia": "chuva", "llovia": "chuva", "tormenta": "chuva",
-        "viento": "vento", "brisa": "vento",
-        "motor": "motor", "motores": "motor", "zumbido": "motor", "nave": "motor",
-        "ciudad": "cidade", "multitud": "multidao", "mar": "oceano", "olas": "oceano",
+        "grillos": "grilos", "bosque": "floresta_noite", "selva": "floresta_noite",
+        "insectos": "insetos", "lluvia": "chuva", "llovia": "chuva", "tormenta": "tempestade",
+        "viento": "vento", "brisa": "vento", "mar": "oceano", "olas": "oceano",
+        "fuego": "fogo", "fogata": "fogo", "chimenea": "fogo", "motor": "motor",
+        "motores": "motor", "zumbido": "motor", "nave": "motor", "transformador": "transformador",
+        "multitud": "multidao", "pajaros": "passaros",
+        "helicoptero": "helicoptero", "reloj": "relogio",
+    },
+    far_words=frozenset({"lejos", "distante", "distancia", "lejano", "remoto", "horizonte"}),
+    near_words=frozenset({"cerca", "cercano", "junto", "proximo", "pegado"}),
+    space_triggers={
+        "galpon": "galpao_vazio", "almacen": "galpao_vazio",
+        "catedral": "catedral", "iglesia": "catedral", "cueva": "caverna",
+        "caverna": "caverna", "tunel": "tunel", "bano": "banheiro",
     },
 )
 

@@ -22,6 +22,9 @@ _PAUSES = {p.value for p in DramaticPause}
 _NARRATION_KINDS = {"narracao", "narrador"}
 _SOUND_KINDS = {"sfx", "som", "efeito", "ambiencia", "ambience", "ambiente"}
 _EVENT_KINDS = {"fala", "dialogo"} | _NARRATION_KINDS | _SOUND_KINDS
+# rótulos de distância aceitos (canônicos + apelidos comuns); o ProximityPolicy resolve.
+_DISTANCES = {"perto", "proximo", "media", "medio", "longe", "distante",
+              "muito_longe", "queima_roupa", "near", "far", "cerca", "lejos"}
 
 
 class SchemaError(ValueError):
@@ -83,6 +86,9 @@ def validate_scene(d: Any, *, allow_numeric_tension: bool = True) -> None:
         if kind in _SOUND_KINDS:
             if not (ev.get("tag") or ev.get("gatilho") or ev.get("som")):
                 errs.append(f"{p}.tag: obrigatorio para {kind}")
+            dist = ev.get("distancia", ev.get("distance"))
+            if dist is not None and str(dist).strip().lower() not in _DISTANCES:
+                errs.append(f"{p}.distancia: {dist!r} nao esta em {sorted(_DISTANCES)}")
             continue
 
         is_narration = kind in _NARRATION_KINDS or \

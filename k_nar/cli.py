@@ -57,8 +57,13 @@ def main(argv: list[str] | None = None) -> int:
 
     out = Path(args.output) if args.output else src.with_suffix(".wav")
 
+    # usa a biblioteca de sons reais automaticamente se existir (sem precisar --sons)
+    sons = args.sons
+    if sons is None and Path("sounds/manifest.json").exists():
+        sons = "sounds"
+
     try:
-        res = render_story(story, models_dir=args.models, sounds_dir=args.sons)
+        res = render_story(story, models_dir=args.models, sounds_dir=sons)
     except ValueError as e:
         # ex.: história sem nenhuma fala/narração/som após a segmentação
         print(f"erro: não consegui montar a cena ({e}). A história tem conteúdo?",

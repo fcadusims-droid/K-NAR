@@ -38,10 +38,21 @@ Cada frase vira um de quatro tipos, automaticamente:
 | `A floresta noturna zumbia.` (cenário) | **AMBIÊNCIA** — uma cama de fundo pela cena toda |
 | o resto da prosa | **NARRAÇÃO** — lida pelo narrador (se houver) |
 
+### Distância e lugar (espacialização)
+
+O K-NAR entende **de onde** o som vem:
+
+- **Distância:** "tiros **ao longe**" soam baixos e abafados (o ar come os agudos) e
+  mais centrais; "um tiro **à queima-roupa**" soa alto, seco e largo. Palavras como
+  *ao longe / distante / no horizonte* e *perto / ao lado / queima-roupa* controlam isso.
+- **Espaço acústico:** mencione o lugar e a **voz ganha o eco** dele — *galpão / armazém*
+  (eco grande e vazio), *catedral / igreja*, *caverna*, *túnel*, *banheiro*. Ou fixe no
+  front-matter: `ambientacao: galpao_vazio`.
+
 ### Dicas para um bom resultado
 
-- **Diálogo entre aspas** e a atribuição logo depois: `"Corram!", gritou ela.`
-  O verbo (`gritou`/`sussurrou`) ajusta a atuação (grito vs. sussurro).
+- **Diálogo entre aspas** `"..."` **ou travessão** `— Fala — disse Fulano` (padrão
+  literário em PT). O verbo (`gritou`/`sussurrou`) ajusta a atuação (grito vs. sussurro).
 - **Som puro numa frase curta e sem nome de pessoa** vira efeito e não é narrado —
   ex.: `Um trovão ecoou.`, `Passos na poça.`. Se você mencionar um personagem
   (`Ana ouviu a porta ranger`), a frase é narrada **e** o efeito toca.
@@ -67,7 +78,10 @@ Não é uma lista fechada — são as mais comuns por idioma (o resto vira narra
 # baixe as vozes do idioma (uma vez)
 scripts/download_lang.sh pt        # ou en / es
 
-# gere o audiobook
+# baixe a biblioteca de EFEITOS SONOROS reais (ESC-50, CC0) — uma vez
+python scripts/download_sfx.py     # (--free-only p/ só CC0/CC-BY; senão, síntese)
+
+# gere o audiobook (usa sounds/ automaticamente se existir)
 python -m k_nar minha_historia.md
 python -m k_nar minha_historia.md --sem-narrador     # radiodrama
 python -m k_nar minha_historia.md --idioma en        # sobrescreve o front-matter
