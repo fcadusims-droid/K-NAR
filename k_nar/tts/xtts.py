@@ -13,9 +13,38 @@ Os imports pesados (torch/TTS) são TARDIOS — o core segue stdlib-puro.
 
 from __future__ import annotations
 
+import re
+
 from k_nar.models import SpeechEvent
 from k_nar.prosody import ProsodyPolicy
 from k_nar.tts.base import RenderedClip
+
+# XTTS tem uma janela de tokens limitada: frases longas estouram ("index out of range").
+# Quebramos o texto em pedaços curtos (fim de frase → vírgula → corte duro) e sintetizamos
+# cada um, concatenando. O `_MAX_CHARS` é conservador p/ caber com folga.
+_MAX_CHARS = 180
+
+
+def _split_text(text: str, max_chars: int = _MAX_CHARS) -> list[str]:
+    text = text.strip()
+    if len(text) <= max_chars:
+        return [text] if text else []
+    # 1) por fim de frase; 2) o que ainda for longo, por vírgula; 3) corte duro por palavra
+    out: list[str] = []
+    for sent in re.split(r"(?<=[.!?…])\s+", text):
+        if len(sent) <= max_chars:
+            if sent.strip():
+                out.append(sent.strip())
+            continue
+        buf = ""
+        for piece in re.split(r"(?<=,)\s+", sent):
+            for word in piece.split():
+                if len(buf) + len(word) + 1 > max_chars and buf:
+                    out.append(buf.strip()); buf = ""
+                buf += " " + word
+        if buf.strip():
+            out.append(buf.strip())
+    return out or [text[:max_chars]]
 
 # cache de modelos por nome (carregar XTTS custa caro: uma vez por processo).
 _MODELS: dict[str, object] = {}
@@ -115,7 +144,7 @@ class XTTSBackend:
         # length_scale >1 = mais lento → speed = 1/length_scale (limitado p/ não distorcer)
         speed = float(max(0.6, min(1.6, 1.0 / max(pros.length_scale, 0.1))))
 
-        kwargs = dict(text=text, language=self.language, speed=speed)
+        kwargs = dict(language=self.language, speed=speed)
         wav_ref = self.speaker_wavs.get(event.character)
         if wav_ref:
             kwargs["speaker_wav"] = wav_ref
@@ -124,7 +153,15 @@ class XTTSBackend:
             if spk:
                 kwargs["speaker"] = spk
 
-        wav = np.asarray(tts.tts(**kwargs), dtype=np.float32)
+        # frases longas estouram a janela do XTTS: sintetiza em pedaços e concatena,
+        # com um respiro curto entre eles (junta como uma leitura contínua).
+        gap = np.zeros(int(0.06 * self._sr), dtype=np.float32)
+        parts = []
+        for chunk in _split_text(text):
+            piece = np.asarray(tts.tts(text=chunk, **kwargs), dtype=np.float32)
+            parts.append(piece)
+        wav = parts[0] if len(parts) == 1 else np.concatenate(
+            [p for pair in zip(parts, [gap] * len(parts)) for p in pair][:-1])
 
         # pitch por reamostragem (mesmo truque do Piper): sobe/desce o tom sem SSML.
         p = 2.0 ** (pros.pitch_semitones / 12.0)
