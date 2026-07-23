@@ -279,7 +279,7 @@ renderer não sabem se o som veio de um sample ou de síntese (mesmo truque do T
 
 | Peça | Papel |
 |---|---|
-| `models.SfxEvent` / `AmbienceEvent` | som PONTUAL (foley, duração real do sample, sequenciado) e CAMA ambiental (cobre a cena, loopável, baixa). Compartilham a interface de duck-typing do Orquestrador. |
+| `models.SfxEvent` / `AmbienceEvent` | som PONTUAL (foley, duração real do sample, sequenciado) e CAMA ambiental (loopável, baixa, **localizada**: entra/sai de cena via `start_id`/`end_id`). Compartilham a interface de duck-typing do Orquestrador. |
 | `sfx/base.py::SfxBackend` | contrato agnóstico (espelha `TTSBackend`): `render(event) → RenderedClip`. |
 | `sfx/library.py::LibrarySfxBackend` | **áudio real** por tag (manifesto → arquivo), com fallback auditável; é o baseline de produção. |
 | `sfx/procedural.py::ProceduralSfxBackend` | síntese determinística por tag (tiro, vento, passos_poca…) — o stand-in runnable, como o `FormantTTS` p/ voz. |
@@ -330,12 +330,26 @@ Os léxicos do Screenwriter foram muito ampliados (PT/EN/ES) + diálogo por **tr
 
 Ver `examples/demo_espacializacao.md` (galpão + tiros perto/longe/horizonte).
 
+## Ambiência localizada + balanço do mix (implementado)
+
+Uma cama de ambiência não toca mais a cena inteira: ela **entra quando o elemento é
+mencionado e sai na última menção + cauda** (com fade), então o "motor do jipe" só
+soa a partir de quando ele entra em cena e some depois sem cortar do nada. O
+Screenwriter ancora cada ambiência (`desde`/`ate` = ids de eventos); o Orquestrador
+resolve em ms (`TimingPolicy.ambience_tail_ms`). Sem âncoras, cobre a cena (retrocompat).
+
+Balanço: ambiências são normalizadas por **RMS** (`MixPolicy.ambience_rms`), não por
+pico — sons densos (grilos, motor) não ficam altos demais; e o ducking é mais fundo
+(`duck_db=-16`). Resultado medido: a ambiência fica ~-21 dB abaixo da narração
+(desducada) e ~-24 dB sob a fala — um bed de fundo de verdade.
+
 ## O que ainda NÃO existe (próximos passos)
 
 1. **Música** com fonte dedicada (a trilha `musica` já é ducada e tem nível no
    `MixPolicy`; falta um `MusicEvent`/gerador — uma trilha via `LibrarySfxBackend` já roda).
-2. **Cena multi-local**: hoje uma história é uma cena só (ambiência/espaço únicos);
-   uma história que anda por lugares/tempos pediria segmentação em cenas.
+2. **Espaço multi-local**: as ambiências já são localizadas no TEMPO, mas o reverb
+   (o "lugar") é um só por cena; uma história que anda por lugares pediria segmentar
+   em cenas com espaços próprios.
 3. **Crossfade equal-power em `sobreposicao` longa**; **sincronia fina SFX↔verbo** via
    forced alignment sobre a narração; calibração do `LlamaDirector`; `NeuralSfxBackend`.
 

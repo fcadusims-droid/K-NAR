@@ -82,8 +82,10 @@ class TimelineRenderer:
             if mono is None or len(mono) == 0:
                 continue
             mono = np.asarray(mono, dtype=np.float32)
-            # Ambiência é uma CAMA: faz o loop do sample até cobrir a cena inteira.
+            # Ambiência é uma CAMA: nível por RMS (loudness percebida — sons densos
+            # como grilos/motor não ficam altos demais) e loop até cobrir o trecho.
             if p.track == "ambiencia":
+                mono = dsp.rms_normalize(mono, target_rms=self.mix.ambience_rms)
                 mono = self._tile(mono, self._ms(p.duration_ms))
             stereo = self._place(p, mono, mode)
             bed = beds.get(p.track)

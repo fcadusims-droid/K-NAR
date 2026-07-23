@@ -186,6 +186,24 @@ def peak_normalize(stereo: np.ndarray, target: float = 0.89) -> np.ndarray:
     return (stereo * (target / peak)).astype(np.float32)
 
 
+def rms_normalize(mono: np.ndarray, target_rms: float = 0.12,
+                  max_peak: float = 0.95) -> np.ndarray:
+    """Normaliza pela ENERGIA (RMS) — a loudness PERCEBIDA, não o pico.
+
+    Sons densos (grilos, motor) têm RMS alto mesmo com pico baixo; normalizar por
+    pico os deixa altos demais. Ambiências devem sentar num nível perceptual
+    consistente, então normalizamos por RMS (com trava de pico anti-clip)."""
+    x = np.asarray(mono, dtype=np.float32)
+    r = float(np.sqrt(np.mean(x ** 2))) if x.size else 0.0
+    if r < 1e-9:
+        return x
+    scaled = x * (target_rms / r)
+    peak = float(np.max(np.abs(scaled))) or 1.0
+    if peak > max_peak:
+        scaled *= max_peak / peak
+    return scaled.astype(np.float32)
+
+
 def clipping_stats(stereo: np.ndarray, ceiling: float = 0.999) -> dict:
     """Mede pico e clipping da mixagem (alimenta `qa.check_mix`).
 

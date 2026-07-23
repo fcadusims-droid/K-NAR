@@ -77,7 +77,7 @@ o pacing — mixado profissionalmente para um som não estragar o outro.
   (síntese determinística, sem arquivos) é o stand-in runnable — como o `FormantTTS`
   é para a voz; `NeuralSfxBackend` (texto→áudio) fica como reserva distante.
 * `SfxEvent` / `AmbienceEvent`: SFX pontual (duração real medida do sample, ancorado a
-  uma ação) e cama ambiental (loopável, cobre a cena, baixa).
+  uma ação) e cama ambiental (loopável, baixa, localizada: entra/sai de cena).
 * **Ducking sidechain** no `_combine_tracks`: ambiência/SFX/música afundam sob a fala
   (envelope da trilha de voz) e voltam quando ela pára. É a mixagem profissional que
   impede a cacofonia.

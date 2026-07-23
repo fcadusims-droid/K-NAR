@@ -105,6 +105,11 @@ class BaseDirector:
             out["ganho_db"] = item.get("ganho_db", item.get("gain_db"))
         if item.get("distancia") or item.get("distance"):
             out["distancia"] = item.get("distancia", item.get("distance"))
+        # ancoragem temporal da ambiência (entra/sai de cena)
+        if item.get("desde"):
+            out["desde"] = item["desde"]
+        if item.get("ate"):
+            out["ate"] = item["ate"]
         return out
 
     def _narration_event(self, item, index, texto) -> dict[str, Any]:
