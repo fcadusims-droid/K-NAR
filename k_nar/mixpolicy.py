@@ -25,15 +25,20 @@ class MixPolicy:
     # Trim de bus por trilha (dB). Aplicado ao bed inteiro de cada trilha, por cima
     # do ganho por evento. Diálogo é a referência (0); o resto se posiciona ao redor.
     track_level_db: dict[str, float] = field(default_factory=lambda: {
-        "dialogo": 0.0,
-        "narracao": -1.0,     # narrador um tico atrás do diálogo
-        "sfx": -2.0,          # efeitos presentes, mas sem competir com a fala
-        "ambiencia": 0.0,     # a cama já entra baixa pelo ganho do evento (~-20 dB)
-        "musica": -6.0,       # trilha bem ao fundo
+        "dialogo": 0.0,       # a fala é a referência (0 dB)
+        "narracao": 0.0,      # narrador no mesmo nível do diálogo (a voz manda)
+        "sfx": -3.0,          # efeitos presentes, mas sem competir com a fala
+        "ambiencia": -1.0,    # cama de fundo (nível perceptual vem do RMS + ganho do evento)
+        "musica": -8.0,       # trilha bem ao fundo
     })
 
+    # RMS-alvo das camas de ambiência (loudness PERCEBIDA, não pico): mantém grilos,
+    # motor e chuva num nível consistente e discreto, independentemente da densidade.
+    ambience_rms: float = 0.12
+
     # Profundidade do ducking: quanto as trilhas duckadas afundam sob a fala plena.
-    duck_db: float = -12.0
+    # Mais fundo que antes — a fala tem de dominar com folga.
+    duck_db: float = -16.0
 
     # Quem é a CHAVE (a presença dispara o ducking) e quem AFUNDA sob ela.
     key_tracks: tuple[str, ...] = ("dialogo", "narracao")

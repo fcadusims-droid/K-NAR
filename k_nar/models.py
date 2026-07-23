@@ -219,9 +219,10 @@ class SfxEvent:
 
 @dataclass
 class AmbienceEvent:
-    """Cama AMBIENTAL que cobre a cena inteira (`floresta_noite`, `chuva`, `motor`).
-    Loopável e baixa (fundo); o ducking a faz afundar sob a fala. Não entra na
-    sequência temporal — é um bed, não um evento pontual."""
+    """Cama AMBIENTAL (`floresta_noite`, `chuva`, `motor`). Loopável e baixa (fundo);
+    o ducking a faz afundar sob a fala. Não entra na sequência temporal — é um bed.
+    Com `start_id`/`end_id`, é LOCALIZADA (entra/sai de cena na hora certa); sem eles,
+    cobre a cena inteira."""
 
     id: str
     tag: str
@@ -229,6 +230,11 @@ class AmbienceEvent:
     track: Track = Track.AMBIENCE
     character: str = ""
     text: str = ""
+    # ANCORAGEM temporal: ids dos eventos onde a ambiência ENTRA e SAI de cena. Vazio
+    # = cobre a cena inteira (retrocompat). O Orquestrador resolve os ids em ms — assim
+    # o "motor do jipe" só toca a partir de quando ele entra, e sai (com fade) depois.
+    start_id: str = ""
+    end_id: str = ""
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "AmbienceEvent":
@@ -237,6 +243,8 @@ class AmbienceEvent:
             tag=str(d.get("tag", d.get("ambiente", d.get("som", "")))),
             gain_db=_as_float(d.get("ganho_db", d.get("gain_db", -20.0)), -20.0),
             text=str(d.get("texto", d.get("descricao", ""))),
+            start_id=str(d.get("desde", d.get("start_id", ""))),
+            end_id=str(d.get("ate", d.get("end_id", ""))),
         )
 
 

@@ -96,9 +96,12 @@ class TestDucking(unittest.TestCase):
         # compara mix com ducking vs soma ingênua: onde há fala, o total (fala +
         # ambiência DUCKADA) deve ser MENOR que fala + ambiência cheia. Sinais
         # positivos p/ o teste ser inequívoco.
+        from k_nar.mixpolicy import MixPolicy
         from k_nar.render.renderer import TimelineRenderer
         sr = 8000
-        r = TimelineRenderer(sr=sr, duck_db=-12.0)
+        # bus 0 dB p/ dialogo/ambiencia: isola o efeito do DUCKING (não o trim de bus)
+        mix = MixPolicy(track_level_db={"dialogo": 0.0, "ambiencia": 0.0}, duck_db=-12.0)
+        r = TimelineRenderer(sr=sr, mix=mix)
         n = sr
         speech = np.zeros((2, n), dtype=np.float32); speech[:, n // 2:] = 0.5
         amb = np.full((2, n), 0.3, dtype=np.float32)

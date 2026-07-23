@@ -90,8 +90,11 @@ class RuleBasedScreenwriter:
 
         elementos: list[dict[str, Any]] = []
         acoes: list[dict[str, Any]] = []
-        ambiences: dict[str, str] = {}   # tag -> primeira frase (dedupe: é bed)
+        # tag -> [freq, id_primeira_mencao, id_ultima_mencao, texto] — para a ambiência
+        # ENTRAR e SAIR de cena na hora certa (não tocar a cena inteira).
+        ambiences: dict[str, list] = {}
         last_speaker: str | None = None
+        last_id: str | None = None   # id do último elemento posicionável (âncora temporal)
         counter = 0
 
         for sent in self._sentences(masked):
@@ -109,6 +112,7 @@ class RuleBasedScreenwriter:
                     if cue:
                         el["deixa"] = cue
                     elementos.append(el)
+                    last_id = el["id"]
                 continue
 
             text = sent.strip()
@@ -116,15 +120,10 @@ class RuleBasedScreenwriter:
                 continue
 
             amb_tag = self._ambience_trigger(text, lex)
-            if amb_tag:
-                # conta frequência: uma cama é a atmosfera PERSISTENTE, não uma menção
-                # de passagem. No fim, mantemos só as mais recorrentes (evita empilhar
-                # ambiências incoerentes de uma palavra solta: "tempestade formando longe").
-                c, _ = ambiences.get(amb_tag, (0, text))
-                ambiences[amb_tag] = (c + 1, text)
-
             sfx_tag = self._sfx_trigger(text, lex)
             pure_sound = bool(sfx_tag) and self._is_pure_sound_cue(text, lex)
+
+            this_anchor = None   # id que representa a POSIÇÃO desta frase na linha
             if sfx_tag:
                 counter += 1
                 el = {"id": f"sfx_{counter}", "tipo": "sfx", "tag": sfx_tag, "texto": text}
@@ -133,18 +132,36 @@ class RuleBasedScreenwriter:
                     el["distancia"] = dist
                 elementos.append(el)
                 acoes.append({"gatilho": sfx_tag, "texto": text, "ancora": f"sfx_{counter}"})
+                this_anchor = last_id = el["id"]
 
-            # Narração: só se há narrador E a frase não é uma didascália sonora pura
-            # (som "passos na poça" não deve ser LIDO — vira o efeito, e só).
+            # Narração: só se há narrador E a frase não é uma didascália sonora pura.
             if narrator and not pure_sound:
                 counter += 1
-                elementos.append({"id": f"narr_{counter}", "tipo": "narracao", "texto": text})
+                nid = f"narr_{counter}"
+                elementos.append({"id": nid, "tipo": "narracao", "texto": text})
+                this_anchor = last_id = nid
 
-        # camas de ambiência: mantém só as MAIS_AMBIENCES mais frequentes (a atmosfera
-        # dominante), evitando um empilhamento incoerente de beds soltos.
+            # Registra a menção da ambiência ancorada na posição desta frase.
+            if amb_tag:
+                anchor = this_anchor or last_id   # posição temporal desta menção
+                rec = ambiences.get(amb_tag)
+                if rec:
+                    rec[0] += 1
+                    rec[2] = anchor                # atualiza a ÚLTIMA menção
+                else:
+                    ambiences[amb_tag] = [1, anchor, anchor, text]  # freq, primeira, ultima, texto
+
+        # camas de ambiência: só as MAIS_AMBIENCES mais frequentes (atmosfera dominante),
+        # cada uma ancorada de onde ENTRA (primeira menção) até onde SAI (última).
         top = sorted(ambiences.items(), key=lambda kv: (-kv[1][0], kv[0]))[: self._MAX_AMBIENCES]
-        beds = [{"id": f"amb_{i+1}", "tipo": "ambiencia", "tag": tag, "texto": src}
-                for i, (tag, (_c, src)) in enumerate(top)]
+        beds = []
+        for i, (tag, (_c, first, last, src)) in enumerate(top):
+            bed = {"id": f"amb_{i+1}", "tipo": "ambiencia", "tag": tag, "texto": src}
+            if first:
+                bed["desde"] = first
+            if last:
+                bed["ate"] = last
+            beds.append(bed)
 
         # Espaço acústico: se o autor não fixou a ambiência (default "seco"), detecta
         # o lugar na prosa ("galpão vazio" → eco de galpão na voz de todos).

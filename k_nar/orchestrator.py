@@ -46,8 +46,8 @@ class Orquestrador:
         `tts.batch.synthesize_all`), evitando que a passagem 2 lenta bloqueie o
         fluxo. Se omitido, sintetiza serialmente (comportamento padrão).
         """
-        # Ambiência é uma CAMA (bed): cobre a cena inteira, não entra na sequência
-        # temporal. Separa-se dos eventos sequenciáveis (fala + SFX pontual).
+        # Ambiência é uma CAMA (bed): não entra na sequência temporal (é localizada
+        # por âncoras depois). Separa-se dos eventos sequenciáveis (fala + SFX pontual).
         sequenced = [ev for ev in scene.events if _track_of(ev) != Track.AMBIENCE.value]
         ambience = [ev for ev in scene.events if _track_of(ev) == Track.AMBIENCE.value]
 
@@ -122,11 +122,20 @@ class Orquestrador:
 
         total = max((p.natural_end_ms for p in placements), default=0)
 
-        # Ambiência: um placement por cama, cobrindo [0, total]. O renderer faz o
-        # loop do sample até preencher; o ducking a faz afundar sob a fala.
+        # Ambiência LOCALIZADA: cada cama entra quando o elemento é mencionado (start_id)
+        # e sai na última menção + cauda (end_id + tail), com fades — não toca a cena
+        # inteira nem "acaba do nada". Sem âncoras (retrocompat): cobre [0, total].
+        id_times = {p.event_id: (p.start_ms, p.natural_end_ms) for p in placements}
         for amb in ambience:
+            start_id = getattr(amb, "start_id", "")
+            end_id = getattr(amb, "end_id", "")
+            start_ms = id_times[start_id][0] if start_id in id_times else 0
+            end_ms = (id_times[end_id][1] + self.policy.ambience_tail_ms
+                      if end_id in id_times else total)
+            end_ms = min(end_ms, total)                # não passa do fim da cena
+            dur = max(0, end_ms - start_ms)
             placements.append(Placement(
-                event_id=amb.id, character="", start_ms=0, duration_ms=total,
+                event_id=amb.id, character="", start_ms=start_ms, duration_ms=dur,
                 pan=0, text=getattr(amb, "tag", ""), track=Track.AMBIENCE.value,
                 # fades longos: a cama entra/sai suave (não é um clique de borda).
                 fade_in_ms=self.policy.ambience_fade_in_ms,

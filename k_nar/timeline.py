@@ -58,8 +58,11 @@ class TimingPolicy:
     edge_fade_in_ms: int = 8
     edge_fade_out_ms: int = 12
     # Fades LONGOS da cama de ambiência: entra/sai suave (não é clique de borda).
-    ambience_fade_in_ms: int = 300
-    ambience_fade_out_ms: int = 700
+    ambience_fade_in_ms: int = 400
+    ambience_fade_out_ms: int = 1200
+    # Cauda: a ambiência localizada persiste este tanto DEPOIS da última menção antes
+    # de sumir (com o fade-out), para o som não "acabar do nada" no meio da cena.
+    ambience_tail_ms: int = 2500
     # Fade do CORTE de interrupção: rápido, mas suave o bastante p/ não estalar.
     interruption_fade_ms: int = 32
     # A fala que ENTRA interrompendo sobe por cima da cauda da anterior ("swell").

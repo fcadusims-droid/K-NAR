@@ -26,6 +26,20 @@ class TestSoundModels(unittest.TestCase):
         ev = SfxEvent.from_dict({"id": "s", "gatilho": "explosao"})
         self.assertEqual(ev.tag, "explosao")
 
+    def test_ambience_reads_anchors(self):
+        ev = AmbienceEvent.from_dict({"id": "a", "tag": "motor", "desde": "narr_3", "ate": "narr_7"})
+        self.assertEqual(ev.start_id, "narr_3")
+        self.assertEqual(ev.end_id, "narr_7")
+
+    def test_screenwriter_anchors_midstory_ambience(self):
+        from k_nar.narrative import RuleBasedScreenwriter
+        sc = RuleBasedScreenwriter().write(
+            "A noite caiu tranquila. Herman andava pelo patio. Entao o motor roncou perto.",
+            lang="pt")
+        amb = next(e for e in sc["elementos"] if e["tipo"] == "ambiencia")
+        self.assertIn("desde", amb)                    # ancorado (não cobre tudo)
+        self.assertNotEqual(amb["desde"], "narr_1")    # não é a primeira frase
+
 
 class TestSoundOrchestration(unittest.TestCase):
     def _scene(self):
@@ -61,11 +75,28 @@ class TestSoundOrchestration(unittest.TestCase):
         self.assertGreaterEqual(sfx.start_ms, d1.natural_end_ms)
         self.assertGreaterEqual(d2.start_ms, sfx.natural_end_ms)
 
-    def test_ambience_spans_whole_scene(self):
+    def test_ambience_spans_whole_scene_without_anchors(self):
+        # sem start_id/end_id (retrocompat): cobre a cena inteira
         tl = Orquestrador(MockTTSBackend()).render_scene(self._scene(), clips=self._clips())
         amb = next(p for p in tl.placements if p.event_id == "amb")
         self.assertEqual(amb.start_ms, 0)
         self.assertEqual(amb.end_ms, tl.total_duration_ms)
+
+    def test_localized_ambience_enters_at_mention(self):
+        # ambiência ancorada em d2 entra QUANDO d2 toca (não em t=0)
+        scene = Scene(id="c", ambiance="seco", events=[
+            SpeechEvent(id="d1", character="A", text="antes"),
+            SpeechEvent(id="d2", character="B", text="o motor liga"),
+            AmbienceEvent(id="amb", tag="motor", gain_db=-20, start_id="d2", end_id="d2"),
+        ])
+        clips = {"d1": RenderedClip("d1", 1000, samples=[0.0]),
+                 "d2": RenderedClip("d2", 1000, samples=[0.0]),
+                 "amb": RenderedClip("amb", 3000, samples=[0.0])}
+        tl = Orquestrador(MockTTSBackend()).render_scene(scene, clips=clips)
+        d2 = next(p for p in tl.placements if p.event_id == "d2")
+        amb = next(p for p in tl.placements if p.event_id == "amb")
+        self.assertGreater(amb.start_ms, 0)            # NÃO toca desde o começo
+        self.assertEqual(amb.start_ms, d2.start_ms)    # entra quando d2 entra
 
     def test_sfx_gain_is_own_not_tension(self):
         tl = Orquestrador(MockTTSBackend()).render_scene(self._scene(), clips=self._clips())
