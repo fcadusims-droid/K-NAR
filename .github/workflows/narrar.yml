@@ -45,9 +45,14 @@ jobs:
           WD_LANG: ${{ github.event.inputs.language }}
         run: python scripts/from_issue.py
 
-      - name: Instala dependências (XTTS-v2)
-        # o modelo (~1.8GB) é baixado no 1º uso; a síntese em CPU é lenta mas fiel.
-        run: pip install --quiet numpy coqui-tts torch
+      - name: Instala dependências (XTTS-v2, combo validado)
+        # torch/torchaudio 2.8 CPU (alinhados, < 2.9 → sem torchcodec/ffmpeg);
+        # transformers < 5 (o coqui 0.27 usa APIs removidas no 5.x).
+        # O modelo (~1.8GB) é baixado no 1º uso; a síntese em CPU é lenta mas fiel.
+        run: |
+          pip install --quiet numpy
+          pip install --quiet "torch==2.8.0" "torchaudio==2.8.0" --index-url https://download.pytorch.org/whl/cpu
+          pip install --quiet coqui-tts "transformers>=4.57,<5"
 
       - name: Narra o roteiro
         run: python -m k_nar roteiro.md -o narracao.wav

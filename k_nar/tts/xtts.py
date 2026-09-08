@@ -94,7 +94,16 @@ class XTTSBackend:
     # ------------------------------------------------------------------ #
     @property
     def backend_id(self) -> str:
-        return f"xtts({self.language}|spk={self.speaker or 'auto'})"
+        # A identidade da VOZ entra na chave de cache: locutor de estúdio, mapa por
+        # personagem E os wavs de referência (clonagem). Sem isto, trocar a voz (ex.:
+        # --voz-ref) e manter o texto devolveria o áudio cacheado da voz anterior.
+        import hashlib
+        import json
+        voice = json.dumps({"speaker": self.speaker, "speakers": self.speakers,
+                            "speaker_wavs": self.speaker_wavs},
+                           sort_keys=True, ensure_ascii=False)
+        vh = hashlib.sha256(voice.encode("utf-8")).hexdigest()[:12]
+        return f"xtts({self.language}|{vh})"
 
     def _load(self):
         if self._tts is not None:

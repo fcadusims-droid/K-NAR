@@ -13,8 +13,15 @@ echo "[setup] numpy (montagem do áudio)..."
 pip install --quiet numpy
 
 if [[ "${1:-}" == "--xtts" ]]; then
-  echo "[setup] XTTS-v2 (coqui-tts + torch) — pesado; o modelo (~1.8GB) baixa no 1º uso..."
-  pip install --quiet coqui-tts torch
+  echo "[setup] XTTS-v2 — combo de deps VALIDADO (100% local, CPU)."
+  # torch/torchaudio 2.8 CPU: alinhados e < 2.9 (evita a exigência de torchcodec/ffmpeg
+  # que o torch >= 2.9 introduz). Índice CPU-only: wheel leve, sem CUDA.
+  echo "[setup]  - torch + torchaudio (CPU)..."
+  pip install --quiet "torch==2.8.0" "torchaudio==2.8.0" --index-url https://download.pytorch.org/whl/cpu
+  # transformers < 5: o coqui 0.27 usa APIs removidas no transformers 5.x.
+  echo "[setup]  - coqui-tts + transformers (4.x)..."
+  pip install --quiet coqui-tts "transformers>=4.57,<5"
+  echo "[setup]  ok. O modelo XTTS (~1.8GB) baixa no 1º uso."
 fi
 
 echo "[setup] ok. rode:  python -m unittest discover -s tests"
