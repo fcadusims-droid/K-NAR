@@ -52,6 +52,9 @@ Duas formas de escolher (XTTS-v2, local e privado):
   traz vários timbres masc./fem.
 - **A sua própria voz** — `--voz-ref minha_voz.wav` clona o timbre de um sample curto
   (6–20s). É o "narrador privado" de verdade: sua voz, sem nada sair da máquina.
+  Requer **FFmpeg** instalado (o torchaudio carrega o wav de referência por ele):
+  `apt-get install -y ffmpeg` (Linux) ou `brew install ffmpeg` (macOS). A narração com
+  locutor de estúdio (sem `--voz-ref`) não precisa disso.
 
 A leitura é **neutra por design** — o narrador não "atua". A única alavanca de
 performance é `--velocidade`.
@@ -91,9 +94,10 @@ montagem do áudio, e o XTTS (torch/coqui) é carregado sob demanda.
 
 ## Limitações honestas
 
-- **XTTS em CPU é lento** (segundos por frase) e baixa ~1.8GB no 1º uso. Para roteiros
-  longos, conte tempo — ou rode numa máquina com GPU. O cache evita re-sintetizar o que
-  não mudou.
+- **XTTS em CPU é lento** e baixa ~1.8GB no 1º uso. Medido aqui (CPU, sem GPU): a carga
+  do modelo na RAM leva ~2 min **por processo** (custo único, amortizado num roteiro
+  longo) e a síntese roda em segundos por frase. Para volume, use uma máquina com GPU.
+  O cache (`.knar_cache/`) evita re-sintetizar o que não mudou entre execuções.
 - **`--motor formante` é rascunho**, não voz de verdade: serve para conferir ritmo,
   pausas e segmentação sem baixar nada. Não use no produto final.
 - A **qualidade final é a do XTTS-v2**. É bom, mas não é ElevenLabs; avalie com o seu

@@ -55,6 +55,7 @@ Duas formas de escolher a voz (XTTS-v2, local):
    `Sofia Hellen` (fem.).
 2. **A sua própria voz** — aponte `voz_ref:` para um `.wav` curto (uns 6–20s) da sua
    voz. O K-NAR clona o timbre. É o "narrador privado" de verdade: nada sai da máquina.
+   Precisa de **FFmpeg** instalado (`apt-get install -y ffmpeg` / `brew install ffmpeg`).
 
 `voz_ref` tem prioridade sobre `locutor` quando os dois vêm.
 
