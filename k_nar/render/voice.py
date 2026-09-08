@@ -1,14 +1,12 @@
-"""FormantTTSBackend — voz sintética não-verbal por síntese de formantes.
+"""FormantTTSBackend — voz sintética de RASCUNHO por síntese de formantes.
 
-Não é fala com palavras (sem espeak/XTTS neste ambiente). É uma vocalização
-"alienígena": uma fonte glotal (trem de harmônicos em F0) modelada por
-ressonadores de formante e um envelope silábico derivado do texto. Serve para
-o que a Camada DSP precisa provar AGORA: ritmo, timing de interrupção, cortes
-limpos, panning e reverb — tudo audível, sem depender de um motor de voz externo.
+Não é fala com palavras: é uma vocalização por formantes (fonte glotal em F0 +
+ressonadores + envelope silábico derivado do texto). É o motor `formante` do narrador
+— um stand-in OFFLINE (sem baixar torch/XTTS) para conferir ritmo, segmentação e
+pausas rapidamente e para os testes rodarem no CI. Não use no áudio final.
 
 Implementa o Protocol `TTSBackend`: devolve `RenderedClip` com `samples` (mono
-float32) e `duration_ms` MEDIDO das amostras. Determinístico e memoizado por id,
-então timing (passagem 2) e render usam exatamente o mesmo áudio.
+float32) e `duration_ms` MEDIDO das amostras. Determinístico e memoizado por id.
 """
 
 from __future__ import annotations
@@ -18,11 +16,9 @@ import numpy as np
 from k_nar.models import TENSION_LABELS, SpeechEvent
 from k_nar.tts.base import RenderedClip
 
-# "Vozes": F0 base (Hz) e trio de formantes (Hz) por personagem. Timbres distintos.
-_VOICES = {
-    "Alien A": dict(f0=104.0, formants=(560.0, 1080.0, 2500.0), color=0.9),
-    "Alien B": dict(f0=158.0, formants=(720.0, 1450.0, 2900.0), color=1.15),
-}
+# Voz de rascunho: F0 base (Hz) + trio de formantes (Hz). O narrador é voz única, então
+# todas as frases usam este timbre; o dict por personagem fica vazio (sem elenco).
+_VOICES: dict = {}
 _DEFAULT_VOICE = dict(f0=130.0, formants=(650.0, 1250.0, 2700.0), color=1.0)
 
 

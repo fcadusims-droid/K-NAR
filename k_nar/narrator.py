@@ -218,7 +218,7 @@ def build_backend(engine: str = "xtts", *, lang: str = "pt", locutor: str = "",
 
 
 def narrate_script(script, *, engine: str = "xtts", cache_dir: str = ".knar_cache",
-                   workers: int = 4) -> NarrationResult:
+                   workers: int = 1) -> NarrationResult:
     """Atalho: um `Script` (do leitor de roteiro) → `NarrationResult`. Monta o motor de
     voz a partir das opções do roteiro e roda os três passos."""
     config = NarrationConfig(
@@ -232,11 +232,13 @@ def narrate_script(script, *, engine: str = "xtts", cache_dir: str = ".knar_cach
 
 
 def narrate(text: str, backend: TTSBackend, *, config: NarrationConfig | None = None,
-            workers: int = 4) -> NarrationResult:
+            workers: int = 1) -> NarrationResult:
     """Roda os três passos: segmenta o texto, sintetiza cada frase pelo `backend` e
-    monta o áudio final. `backend` já vem configurado (voz/idioma) pelo chamador."""
-    import numpy as np
+    monta o áudio final. `backend` já vem configurado (voz/idioma) pelo chamador.
 
+    `workers=1` por padrão: o XTTS (torch) não é thread-safe para inferência concorrente
+    numa mesma instância, e o torch já paraleliza entre núcleos por dentro de cada chamada.
+    """
     from k_nar.tts.batch import synthesize_all
 
     config = config or NarrationConfig()
