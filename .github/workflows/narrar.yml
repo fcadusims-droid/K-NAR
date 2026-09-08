@@ -1,8 +1,8 @@
-name: audiobook
+name: narrar
 
-# Renderiza uma história em audiobook. Dispara por:
-#  - Issue Form "Gerar audiobook" (label `audiobook`)  -> a interface do usuário;
-#  - workflow_dispatch                                  -> teste/uso manual.
+# Narra um roteiro e devolve o áudio. Dispara por:
+#  - Issue Form "Gerar narração" (label `narracao`)  -> a interface do usuário;
+#  - workflow_dispatch                                -> teste/uso manual.
 on:
   issues:
     types: [opened, edited]
@@ -11,25 +11,21 @@ on:
       titulo:
         description: "Título"
         required: false
-        default: "historia"
-      story:
-        description: "História (prosa)"
+        default: "narracao"
+      script:
+        description: "Roteiro (o texto a narrar)"
         required: true
       language:
         description: "Idioma: pt | en | es"
         required: false
         default: "pt"
-      narrator:
-        description: "Narrador: com | sem"
-        required: false
-        default: "com"
 
 jobs:
-  render:
-    # só roda em issues com o label `audiobook` (ou em dispatch manual)
+  narrar:
+    # só roda em issues com o label `narracao` (ou em dispatch manual)
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'audiobook'))
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'narracao'))
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -41,32 +37,28 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Monta a história (story.md)
+      - name: Monta o roteiro (roteiro.md)
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
           WD_TITLE: ${{ github.event.inputs.titulo }}
-          WD_STORY: ${{ github.event.inputs.story }}
+          WD_SCRIPT: ${{ github.event.inputs.script }}
           WD_LANG: ${{ github.event.inputs.language }}
-          WD_NARR: ${{ github.event.inputs.narrator }}
         run: python scripts/from_issue.py
 
-      - name: Instala dependências
-        run: pip install --quiet numpy pedalboard piper-tts onnx
+      - name: Instala dependências (XTTS-v2)
+        # o modelo (~1.8GB) é baixado no 1º uso; a síntese em CPU é lenta mas fiel.
+        run: pip install --quiet numpy coqui-tts torch
 
-      - name: Baixa a voz do idioma
-        run: bash scripts/download_lang.sh "$(cat run_lang.txt)"
-
-      - name: Gera o audiobook
-        run: python -m k_nar story.md -o audiobook.wav
+      - name: Narra o roteiro
+        run: python -m k_nar roteiro.md -o narracao.wav
 
       - name: Publica o áudio (artifact)
-        id: upload
         uses: actions/upload-artifact@v4
         with:
-          name: audiobook
+          name: narracao
           path: |
-            audiobook.wav
-            story.md
+            narracao.wav
+            roteiro.md
 
       - name: Comenta o resultado no issue
         if: github.event_name == 'issues'
@@ -79,9 +71,9 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: [
-                '🎧 **Seu audiobook está pronto!**',
+                '🎙️ **Sua narração está pronta!**',
                 '',
-                `Baixe o arquivo \`audiobook.wav\` na aba **Artifacts** desta execução:`,
+                'Baixe o arquivo `narracao.wav` na aba **Artifacts** desta execução:',
                 run,
                 '',
                 '_Gerado pelo K-NAR. Edite o issue para gerar de novo._'
@@ -98,5 +90,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `⚠️ Não consegui gerar o audiobook. Veja o log: ${run}`
+              body: `⚠️ Não consegui gerar a narração. Veja o log: ${run}`
             });

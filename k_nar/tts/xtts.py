@@ -1,14 +1,12 @@
-"""XTTSBackend — voz neural de ALTA qualidade (Coqui XTTS-v2), atrás do mesmo Protocol.
+"""XTTSBackend — voz neural de ALTA qualidade (Coqui XTTS-v2), atrás do `TTSBackend`.
 
-Piper "medium" é o teto de timbre hoje (não há voz "high" em pt). O XTTS-v2 é um salto
-de naturalidade — multilíngue, com prosódia bem mais viva — e satisfaz o mesmo
-`TTSBackend`, então o Orquestrador não muda uma linha. Reaproveita a `ProsodyPolicy` +
-`EmotionPolicy`: a EMOÇÃO vira `speed` (ritmo) no XTTS e o pitch é aplicado por
-reamostragem (como no Piper), mantendo a atuação coerente entre os dois motores.
+É o motor de voz padrão do narrador: multilíngue, natural, e LOCAL — nada do roteiro
+sai da máquina. A voz vem de um locutor de estúdio (por nome) ou de um wav de
+referência (clona a sua própria voz). O narrador passa uma `ProsodyPolicy` NEUTRA, então
+a leitura sai fiel ao texto; `rate` (a velocidade do roteiro) vira `speed` no XTTS.
 
 Custo honesto: XTTS em CPU é LENTO (segundos por frase) e o modelo pesa ~1.8GB (baixado
-na 1ª vez). Por isso é OPT-IN (o pipeline usa Piper por padrão; `--voz xtts` liga isto).
-Os imports pesados (torch/TTS) são TARDIOS — o core segue stdlib-puro.
+na 1ª vez). Os imports pesados (torch/TTS) são TARDIOS — a segmentação segue stdlib-pura.
 """
 
 from __future__ import annotations

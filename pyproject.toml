@@ -4,19 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "k-nar"
-version = "0.1.0"
-description = "Motor de Performance Dramatica para audio drama autonomo (orquestrador de duas passagens, orientado a linha de tempo)."
+version = "0.2.0"
+description = "Narrador privado para conteúdo de redes sociais: roteiro em texto -> um arquivo de áudio narrado (voz neural XTTS, local)."
 readme = "README.md"
 requires-python = ">=3.10"
-# O CORE nao tem dependencias: a logica de ritmo roda so com stdlib.
-dependencies = []
+# numpy é usada na montagem do áudio (a segmentação e a leitura do roteiro são stdlib).
+dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
-# Backends reais de TTS e o motor de DSP entram como EXTRAS, isolados do core.
-tts = ["piper-tts>=1.5", "onnx>=1.16", "numpy>=1.24"]  # TTS neural real + forced alignment (Piper, CPU)
-dsp = ["numpy>=1.24", "pedalboard>=0.9"]   # camada de render: sintese, mix, reverb
-llm = ["llama-cpp-python>=0.2"]            # Director com LLM local (GGUF em CPU)
-dev = ["pytest", "numpy>=1.24", "pedalboard>=0.9"]
+# Voz neural de alta qualidade (local, privada). O modelo (~1.8GB) baixa no 1º uso.
+xtts = ["coqui-tts>=0.24", "torch>=2.1"]
+# Entrega comprimida sob limite de tamanho (Opus/MP3) via scripts/package_audio.py.
+package = ["soundfile>=0.12", "lameenc>=1.7"]
+dev = ["pytest", "numpy>=1.24"]
 
 [tool.setuptools.packages.find]
 include = ["k_nar*"]

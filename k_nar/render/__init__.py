@@ -1,9 +1,5 @@
-"""Camada de render (DSP) — consome a Timeline/EDL e produz áudio real.
+"""Camada de áudio (DSP): trim de silêncio, reamostragem, voz sintética de rascunho.
 
-Depende de numpy (e opcionalmente pedalboard). NÃO é importada pelo core, para
-que a lógica de ritmo continue sem dependências.
+Depende de numpy. NÃO é importada na inicialização do pacote — os módulos que a usam
+fazem imports tardios, para o núcleo (segmentação/roteiro) seguir sem dependências.
 """
-
-from k_nar.render.renderer import TimelineRenderer
-
-__all__ = ["TimelineRenderer"]

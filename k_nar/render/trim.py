@@ -1,12 +1,11 @@
 """TrimmedTTS — decorator de TTSBackend que remove o padding de silêncio.
 
-Envolve QUALQUER backend (mock, formante, XTTS, API...) e devolve um `RenderedClip`
-com o áudio já trimado e a `duration_ms` REMEDIDA — estritamente a fala. Assim o
-Orquestrador nunca vê o tempo morto que motores neurais injetam nas bordas, e o
-cálculo proporcional da interrupção + o `snap_to_valley` operam só sobre fonemas.
+Envolve QUALQUER backend (formante, XTTS, API...) e devolve um `RenderedClip` com o
+áudio já trimado e a `duration_ms` REMEDIDA — estritamente a fala. Assim a montagem
+insere as pausas do roteiro sem herdar o tempo morto que motores neurais injetam nas
+bordas de cada frase.
 
-    backend = TrimmedTTS(XttsBackend(...), threshold_db=-45)
-    Orquestrador(backend).render_scene(cena)   # timing correto, sem padding
+    backend = TrimmedTTS(XTTSBackend(...), threshold_db=-45)
 """
 
 from __future__ import annotations
@@ -44,23 +43,15 @@ class TrimmedTTS:
 
         sr = clip.sample_rate
         mono = np.asarray(clip.samples, dtype=np.float32)
-        trimmed, lead, trail = trim_silence(mono, self.threshold_db, self.keep_ms, sr)
+        trimmed, _lead, _trail = trim_silence(mono, self.threshold_db, self.keep_ms, sr)
         if len(trimmed) == 0:
             trimmed = mono  # fala inteira abaixo do threshold: não descarta
-            lead = 0
-
-        # O forced alignment sofre o MESMO corte de bordas que o áudio: sem isso, as
-        # fronteiras de fonema apontariam para índices do sinal pré-trim.
-        alignment = clip.alignment
-        if alignment is not None:
-            alignment = alignment.trimmed(lead, len(trimmed))
 
         out = RenderedClip(
             event_id=clip.event_id,
             duration_ms=int(round(1000 * len(trimmed) / sr)),  # duração REMEDIDA
             sample_rate=sr,
             samples=trimmed,
-            alignment=alignment,
         )
         self._cache[event.id] = out
         return out

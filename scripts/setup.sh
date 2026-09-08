@@ -1,27 +1,21 @@
 #!/usr/bin/env bash
-# Setup do K-NAR. Reinstala tudo que o ambiente efemero perde entre sessoes.
+# Setup do K-NAR (narrador). Reinstala o que o ambiente efêmero perde entre sessões.
 #
-#   scripts/setup.sh          # deps de DSP (numpy + pedalboard) — leve, rapido
-#   scripts/setup.sh --llm    # + llama-cpp-python (compila) + baixa o modelo GGUF
+#   scripts/setup.sh            # numpy (montagem) — leve; roda o motor 'formante'
+#   scripts/setup.sh --xtts     # + coqui-tts + torch (voz XTTS de alta qualidade)
 #
-# O core roda sem nada disso (stdlib). Estas deps sao so p/ render e Director-LLM.
+# A segmentação do roteiro e a leitura do front-matter são stdlib puro. numpy só é
+# exigida na montagem do áudio; o XTTS (torch/coqui) é a voz neural real (pesada).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "[setup] deps de DSP (numpy + pedalboard)..."
-pip install --quiet numpy pedalboard
+echo "[setup] numpy (montagem do áudio)..."
+pip install --quiet numpy
 
-echo "[setup] TTS neural (Piper, CPU) + forced alignment (onnx) + voz PT-BR..."
-# onnx habilita o forced alignment do Piper (patch do grafo p/ expor durações de
-# fonema); sem ele, o corte de interrupção cai no snap de energia (fallback).
-pip install --quiet piper-tts onnx
-bash scripts/download_piper.sh
-bash scripts/download_piper.sh jeff   # 2a voz p/ multivoz (narrador/personagens)
-
-if [[ "${1:-}" == "--llm" ]]; then
-  echo "[setup] llama-cpp-python (compila; pode levar alguns minutos)..."
-  CMAKE_ARGS="-DGGML_NATIVE=OFF" pip install --quiet llama-cpp-python
-  bash scripts/download_model.sh
+if [[ "${1:-}" == "--xtts" ]]; then
+  echo "[setup] XTTS-v2 (coqui-tts + torch) — pesado; o modelo (~1.8GB) baixa no 1º uso..."
+  pip install --quiet coqui-tts torch
 fi
 
 echo "[setup] ok. rode:  python -m unittest discover -s tests"
+echo "        e:      python -m k_nar examples/roteiro_yt_exemplo.txt --motor formante"
