@@ -1,0 +1,41 @@
+name: 🎙️ Gerar narração
+description: Cole o roteiro do seu vídeo/post e o K-NAR devolve o áudio narrado, fiel ao texto.
+title: "[narracao] "
+labels: ["narracao"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Cole **o texto que o narrador deve ler**, na ordem. O K-NAR lê como está —
+        sem inventar som, trilha ou "atuação". Cabeçalhos de Markdown (`# ...`) e
+        comentários (`<!-- ... -->`) são ignorados. Opções em
+        [docs/TEMPLATE.md](../blob/main/docs/TEMPLATE.md).
+  - type: input
+    id: titulo
+    attributes:
+      label: Título
+      placeholder: Como o algoritmo do YouTube funciona
+    validations:
+      required: true
+  - type: dropdown
+    id: idioma
+    attributes:
+      label: Idioma
+      options:
+        - pt
+        - en
+        - es
+      default: 0
+    validations:
+      required: true
+  - type: textarea
+    id: roteiro
+    attributes:
+      label: Roteiro
+      description: O texto a narrar (um parágrafo por bloco).
+      placeholder: |
+        Todo mundo acha que sabe como o algoritmo funciona. Quase ninguém sabe.
+
+        Neste vídeo eu vou te mostrar os três sinais que realmente importam.
+    validations:
+      required: true

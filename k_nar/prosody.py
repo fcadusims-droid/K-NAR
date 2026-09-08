@@ -1,20 +1,12 @@
-"""ProsodyPolicy — a matriz que traduz TENSÃO em manipuladores acústicos reais.
+"""ProsodyPolicy — a matriz que traduz TENSÃO/EMOÇÃO em manipuladores acústicos.
 
-O ponto cego que isto resolve: o Piper é emocionalmente inerte. Ele não muda a
-entonação porque o JSON diz "cena dramática"; a onda que ele gera ignora a emoção.
-Logo, TODA a expressividade precisa ser sintetizada por nós — e de forma consistente
-entre o que o TTS gera, o que o Orquestrador corta e o que o DSP processa. Senão o
-áudio soa "descolado": corte agressivo sobre uma fala que o motor pronunciou plana.
+Um escalar de tensão (0..1) se abre em rate (velocidade), pitch (agudo/grave),
+variância prosódica e ganho; a EmotionPolicy soma um gesto por cima. O backend de voz
+lê daqui (rate → speed, pitch por reamostragem).
 
-Esta política é a fonte única: um escalar de tensão (0..1) se abre em rate (velocidade),
-pitch (agudo/grave), variância prosódica e ganho (dinâmica). O backend neural usa
-rate/pitch/variância; o renderer usa o ganho. Ambos leem daqui, então concordam.
-
-Como o Piper não tem style embedding zero-shot, injetamos a flutuação por 3 alavancas:
-  1. length_scale (nativa)   -> comprime/alonga a fala (ritmo);
-  2. pitch por reamostragem  -> agudo (agitação) / grave (sombrio), sem mudar a duração;
-  3. noise_w/noise_scale     -> variabilidade de entonação (mais viva sob tensão);
-  + ganho (no DSP)           -> contraste de dinâmica (sussurro vs grito).
+No NARRADOR ela é instanciada NEUTRA (âncoras calmo==tenso==1.0, pitch 0): a leitura
+sai fiel, e a única alavanca ativa é `rate` — a velocidade pedida no roteiro. Os
+parâmetros de flutuação (emoção/tensão) existem para uma futura leitura expressiva.
 """
 
 from __future__ import annotations

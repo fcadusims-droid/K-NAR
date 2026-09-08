@@ -1,15 +1,19 @@
-"""CLI do K-NAR: história (.md/.txt) → audiobook (.wav). É o que a Action chama.
+"""CLI do K-NAR: roteiro (.txt/.md) → um arquivo de áudio narrado.
 
-    python -m k_nar historia.md                     # audiobook em historia.wav
-    python -m k_nar historia.md -o saida.wav
-    python -m k_nar historia.md --sem-narrador      # modo radiodrama
-    python -m k_nar historia.md --idioma en         # sobrescreve o front-matter
-    python -m k_nar historia.md --sons sounds/      # usa samples reais (manifest.json)
-    python -m k_nar historia.md --pessoa primeira   # narração na voz do protagonista
-    python -m k_nar historia.md --sem-espaco        # desliga o reverb por cômodo
+O K-NAR é um NARRADOR de conteúdo: você manda o roteiro de um vídeo/post e ele
+devolve o áudio completo, narrado por uma voz só, fiel ao texto — sem inventar som,
+trilha ou "atuação". É o que a interface web e a GitHub Action chamam.
 
-As flags sobrescrevem o front-matter da história; o front-matter sobrescreve os
-defaults. Ver o formato em `docs/TEMPLATE.md`.
+    python -m k_nar roteiro.txt                       # -> roteiro.wav
+    python -m k_nar roteiro.txt -o narracao.wav
+    python -m k_nar roteiro.txt --idioma en           # pt | en | es
+    python -m k_nar roteiro.txt --velocidade 1.1      # acelera a leitura
+    python -m k_nar roteiro.txt --locutor "Dionisio Schuyler"   # locutor de estúdio
+    python -m k_nar roteiro.txt --voz-ref minha_voz.wav         # clona a SUA voz
+    python -m k_nar roteiro.txt --motor formante      # rascunho offline (sem torch)
+    python -m k_nar roteiro.txt --formato opus        # entrega comprimida (.ogg)
+
+As flags sobrescrevem o front-matter do roteiro. Ver o formato em `docs/TEMPLATE.md`.
 """
 
 from __future__ import annotations
@@ -21,81 +25,85 @@ from pathlib import Path
 
 
 def _fmt(ms: int) -> str:
-    return f"{ms / 1000:6.2f}s"
+    s = ms / 1000.0
+    return f"{int(s // 60)}m{s % 60:04.1f}s" if s >= 60 else f"{s:.1f}s"
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="k_nar", description="História → audiobook dramatizado.")
-    p.add_argument("historia", help="arquivo .md ou .txt da história")
-    p.add_argument("-o", "--output", help="arquivo .wav de saída (default: <historia>.wav)")
+    p = argparse.ArgumentParser(prog="k_nar", description="Roteiro → áudio narrado.")
+    p.add_argument("roteiro", help="arquivo .txt ou .md com o roteiro (o texto a narrar)")
+    p.add_argument("-o", "--output", help="arquivo .wav de saída (default: <roteiro>.wav)")
     p.add_argument("--idioma", "--lang", dest="idioma", help="pt | en | es (sobrescreve o front-matter)")
-    grp = p.add_mutually_exclusive_group()
-    grp.add_argument("--narrador", dest="narrador", action="store_true", default=None,
-                     help="força COM narrador")
-    grp.add_argument("--sem-narrador", dest="narrador", action="store_false",
-                     help="força SEM narrador (radiodrama)")
-    p.add_argument("--sons", "--sounds", dest="sons", help="pasta de samples reais (com manifest.json)")
-    p.add_argument("--models", default="models/piper", help="pasta dos modelos Piper")
-    p.add_argument("--pessoa", "--person", dest="pessoa",
-                   help="primeira | terceira | auto (sobrescreve o front-matter)")
-    p.add_argument("--sem-espaco", "--no-spatial", dest="espaco", action="store_false",
-                   default=True, help="desliga o 'set virtual' de zonas (reverb por cômodo)")
-    p.add_argument("--voz", "--voice", dest="voz", default="piper",
-                   choices=["piper", "xtts"],
-                   help="motor de voz: piper (rápido) | xtts (alta qualidade, lento)")
+    p.add_argument("--velocidade", "--speed", dest="velocidade", type=float,
+                   help="ritmo da leitura (1.0 = neutro; 1.1 acelera; 0.9 desacelera)")
+    p.add_argument("--locutor", "--speaker", dest="locutor",
+                   help="locutor de estúdio do XTTS (ex.: 'Dionisio Schuyler')")
+    p.add_argument("--voz-ref", "--voice-ref", dest="voz_ref",
+                   help="wav de referência p/ CLONAR a sua voz (tem prioridade sobre --locutor)")
+    p.add_argument("--motor", "--engine", dest="motor", default="xtts",
+                   choices=["xtts", "formante"],
+                   help="motor de voz: xtts (alta qualidade, padrão) | formante (rascunho offline)")
+    p.add_argument("--formato", "--format", dest="formato", default="wav",
+                   choices=["wav", "opus", "mp3"],
+                   help="wav (padrão) | opus/mp3 (comprimido, sob limite de tamanho)")
+    p.add_argument("--max-mb", type=float, default=28.0, help="teto por arquivo p/ opus/mp3")
+    p.add_argument("--cache", default=".knar_cache", help="pasta de cache de síntese")
     p.add_argument("--quiet", action="store_true", help="não imprime o resumo")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
-    from k_nar.pipeline import render_story
-    from k_nar.qa import format_report
-    from k_nar.story import load_story
+    from k_nar.narrator import narrate_script
+    from k_nar.script import load_script
 
     args = build_parser().parse_args(argv)
-    src = Path(args.historia)
+    src = Path(args.roteiro)
     if not src.exists():
-        print(f"erro: história não encontrada: {src}", file=sys.stderr)
+        print(f"erro: roteiro não encontrado: {src}", file=sys.stderr)
         return 2
 
-    story = load_story(src)
+    script = load_script(src)
     if args.idioma:
-        story = replace(story, lang=args.idioma)
-    if args.narrador is not None:
-        story = replace(story, narrator=args.narrador)
-    if args.pessoa:
-        story = replace(story, person=args.pessoa)
+        script = replace(script, lang=args.idioma)
+    if args.velocidade is not None:
+        script = replace(script, speed=args.velocidade)
+    if args.locutor:
+        script = replace(script, locutor=args.locutor)
+    if args.voz_ref:
+        script = replace(script, voice_ref=args.voz_ref)
+
+    try:
+        res = narrate_script(script, engine=args.motor, cache_dir=args.cache)
+    except ValueError as e:
+        print(f"erro: {e}", file=sys.stderr)
+        return 1
+    except ImportError as e:
+        print(f"erro: o motor '{args.motor}' precisa de dependências que faltam ({e}).\n"
+              f"      instale com: pip install coqui-tts torch   (ou use --motor formante)",
+              file=sys.stderr)
+        return 1
 
     out = Path(args.output) if args.output else src.with_suffix(".wav")
 
-    # usa a biblioteca de sons reais automaticamente se existir (sem precisar --sons)
-    sons = args.sons
-    if sons is None and Path("sounds/manifest.json").exists():
-        sons = "sounds"
-
-    try:
-        res = render_story(story, models_dir=args.models, sounds_dir=sons,
-                           spatialize=args.espaco, voice_engine=args.voz)
-    except ValueError as e:
-        # ex.: história sem nenhuma fala/narração/som após a segmentação
-        print(f"erro: não consegui montar a cena ({e}). A história tem conteúdo?",
-              file=sys.stderr)
-        return 1
-    res.write(str(out))
+    if args.formato == "wav":
+        res.write_wav(out)
+        outputs = [str(out)]
+    else:
+        prefix = str(out.with_suffix(""))
+        outputs = res.package(prefix, fmt=args.formato, max_mb=args.max_mb)
 
     if not args.quiet:
-        n_amb = sum(1 for p in res.timeline.placements if p.track == "ambiencia")
-        n_sfx = sum(1 for p in res.timeline.placements if p.track == "sfx")
-        n_fala = sum(1 for p in res.timeline.placements if p.track in ("dialogo", "narracao"))
-        n_zonas = len({p.space for p in res.timeline.placements if p.space})
-        print(f"história : {story.title!r}  ({story.lang}, "
-              f"{'com' if story.narrator else 'sem'} narrador, {res.person} pessoa)")
-        print(f"voz      : {res.voice_kind}")
-        print(f"trilhas  : {n_fala} falas, {n_sfx} SFX, {n_amb} ambiência"
-              + (f", {n_zonas} cômodos (espacial)" if n_zonas else ""))
-        print(f"duração  : {_fmt(res.timeline.total_duration_ms)}")
-        print(format_report(res.issues))
-    print(f"áudio    : {out.resolve()}")
+        n = len(res.segments)
+        print(f"roteiro  : {script.title!r}  ({script.lang})")
+        print(f"voz      : {res.voice_kind}"
+              + (f"  (clonada de {script.voice_ref})" if script.voice_ref
+                 else (f"  (locutor {script.locutor})" if script.locutor else "")))
+        print(f"frases   : {n}   velocidade {script.speed:g}")
+        print(f"duração  : {_fmt(res.duration_ms)}")
+        if res.cache_misses or res.cache_hits:
+            print(f"cache    : {res.cache_hits} reaproveitadas, {res.cache_misses} sintetizadas")
+    for o in outputs:
+        print(f"áudio    : {Path(o).resolve()}")
     return 0
 
 

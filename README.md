@@ -1,266 +1,110 @@
 # K-NAR
 
-Motor de **Performance Dramática** para áudio drama autônomo. Em vez de gerar
-arquivos de fala isolados e colá-los (ritmo mecânico, vozes num vácuo), o K-NAR
-funciona como uma engine orientada a **linha de tempo**: o texto vira metadados
-de tempo e performance, e o áudio é renderizado depois num espaço acústico coeso.
+**Narrador privado para conteúdo de redes sociais.** Você manda o **roteiro** de um
+vídeo/post e o K-NAR devolve **um arquivo de áudio narrado** — voz neural natural,
+fiel ao texto, na ordem, sem inventar som, trilha ou "atuação". A voz roda **local**
+(XTTS-v2), então nada do seu roteiro precisa sair da sua máquina.
 
 ## A ideia em uma frase
 
-> O LLM é o **Diretor de Palco** (gera *intenção relativa*: tensão, agressividade,
-> pausas). O código é o **contra-regra** (traduz intenção + duração real do áudio
-> em milissegundos). O motor de áudio é o **palco** (reverb e panning). Ninguém faz
-> o trabalho do outro.
+> Roteiro em texto → **um** narrador lê como está → um arquivo de áudio pronto pro
+> seu editor de vídeo. Fidelidade ao roteiro, não interpretação.
 
-## O Orquestrador de Duas Passagens
+## Como funciona
 
-Resolve a dependência circular "preciso do tempo pra montar a cena, mas o tempo só
-existe depois de sintetizar":
+Três passos (`k_nar/narrator.py`):
 
 ```
-PASSAGEM 1  LLM   -> texto + metadados RELATIVOS  (nunca segundos)
-PASSAGEM 2  TTS   -> sintetiza "seco" e MEDE a duracao real
-PASSAGEM 3  Code  -> cruza relativo x real -> Timeline (dados puros)
+1. SEGMENTAR   o texto vira frases (respiro curto) agrupadas em parágrafos (respiro maior)
+2. SINTETIZAR  cada frase passa pelo motor de voz (XTTS), com trim de silêncio + cache
+3. MONTAR      concatena tudo com as pausas, normaliza e escreve um WAV (ou .ogg/.mp3)
 ```
 
-Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+O motor de voz é **agnóstico** (um `TTSBackend`): XTTS-v2 local por padrão, ou um
+stand-in sintético (`formante`) para rascunho/testes sem baixar torch.
 
-## Estado atual
-
-**Core (stdlib puro, sem dependências):**
-
-- `Orquestrador` — as passagens 2 e 3.
-- `TimingPolicy` — a matriz relativo→ms, com guardas de inteligibilidade e agora
-  também os **envelopes de atenuação** que a EDL carrega (fades anti-clique).
-- `TTSBackend` — contrato agnóstico; `MockTTSBackend` para testar sem motor de voz.
-- `Timeline` — a Edit Decision List que o DSP consome.
-- `schema.validate_scene` — validação **estrita** do JSON do LLM (recusa fallback silencioso).
-
-**Camada Director (`k_nar/director/`) — PASSAGEM 1:**
-
-- `RuleBasedDirector` — roteiro cru → metadados relativos por heurística (sem modelo).
-- `LlamaDirector` — o mesmo, com um LLM local pequeno (Qwen2.5-1.5B GGUF, CPU).
-
-**Expressividade (`k_nar/prosody.py`):**
-
-- `ProsodyPolicy` — a matriz que traduz tensão em manipuladores acústicos reais
-  (rate, pitch, variância, ganho). Fonte única lida pelo TTS e pelo Orquestrador,
-  para a emoção mover a onda, o corte e o mix juntos (o Piper é inerte à semântica).
-
-**TTS (`k_nar/tts/`):**
-
-- `PiperTTSBackend` — voz **neural real** (Piper/onnx, CPU): fonemas, plosivas,
-  respiração. Aplica a `ProsodyPolicy` (rate via `length_scale`, pitch por reamostragem).
-- `CachingTTS` — cache em disco por conteúdo: iterar não re-sintetiza (0.40s → 0.01s).
-- `synthesize_all` — passagem 2 em paralelo (pool de threads).
-- `FormantTTSBackend` / `MockTTSBackend` — voz sintética / só-duração, para testes.
-
-**Camada DSP (`k_nar/render/`, requer `numpy` + `pedalboard`):**
-
-- `TrimmedTTS` — remove o padding de silêncio do TTS antes de medir a duração.
-- `TimelineRenderer` — materializa a EDL em áudio estéreo: fades anti-clique, snap do
-  corte ao vale de energia, **crossfade equal-power** na interrupção, panning e **bus
-  de reverb convolutivo** único por cena. Modos `naive`/`dry`/`full` para A/B.
-
-**Forced alignment (`k_nar/align.py`):**
-
-- `Alignment` — fronteiras fonema→amostra do próprio Piper/VITS (`include_alignments`,
-  requer `onnx`). O corte de interrupção ancora numa fronteira de palavra/fonema REAL
-  (decidido no Orquestrador, dado puro) e o renderer só refina o instante acústico numa
-  janela estreita. Snap de energia vira fallback para backends sem fonemas.
-
-**Voz por personagem + QA (`k_nar/tts/multivoice.py`, `k_nar/qa.py`):**
-
-- `MultiVoiceTTSBackend` — `VoiceProfile` por personagem (modelo Piper próprio,
-  `speaker_id`, pitch/ritmo). Roteia atrás do mesmo `TTSBackend`; o Orquestrador não muda.
-- `check_timeline`/`check_mix` — QA automatizado: overlaps que engolem, cortes
-  agressivos, clipping. Rodam no CI a cada push/PR.
-
-**Narração e áudio narrativo (`k_nar/models.py`, `k_nar/narrative/`):**
-
-- `Track` + `NarrationEvent` — a linha de tempo vira multitrack (diálogo/narração/…);
-  o renderer mixa por trilha (base do ducking).
-- `RuleBasedScreenwriter` (PASSAGEM 0) — prosa → narração + diálogo (com locutor) +
-  **SFX** (som pontual) + **ambiência** (cenário). Descrição sonora vira SOM, não
-  narração; o **narrador é opcional** (modo radiodrama). Cadeia em `examples/story_to_audio.py`.
-
-**Som: SFX + ambiência + ducking (`k_nar/sfx/`, `render/renderer.py`):**
-
-- `SfxBackend` (espelha `TTSBackend`): `LibrarySfxBackend` (samples **reais** por tag,
-  baseline de produção) e `ProceduralSfxBackend` (síntese, stand-in runnable).
-- **Biblioteca real**: `scripts/download_sfx.py` baixa o ESC-50 (50 categorias de som)
-  **ciente de licença** (prefere CC0/CC-BY). Catálogo de ~55 sons em `k_nar/sfx/catalog.py`.
-- `SfxEvent` / `AmbienceEvent` — som pontual (foley, ancora a fala p/ reagir) e cama.
-- **Ducking sidechain** no `_combine_tracks`: ambiência/SFX afundam sob a fala e voltam
-  quando ela pára — a mixagem que impede a cacofonia. O `duck_db` controla a profundidade.
-
-**Espacialização (`k_nar/proximity.py`, `k_nar/space/`, `render/impulse.py`):**
-
-- **Distância** (`ProximityPolicy`): "tiros ao longe" = baixo, abafado (passa-baixa) e
-  central; "à queima-roupa" = alto e largo — detectado da prosa.
-- **Espaço** (presets de IR): "galpão vazio / catedral / caverna" → a voz ganha o eco do
-  lugar (reverb convolutivo por cena), detectado da prosa ou fixo no front-matter.
-- **"Set virtual" de zonas** (`SceneModel`, Nível 1): quando a prosa passa por **2+
-  cômodos**, o K-NAR monta um **mapa da casa** (cômodos + portas). O **reverb segue o
-  POV** de cômodo em cômodo, e uma voz do **cômodo ao lado** soa **abafada** (oclusão:
-  a parede come os agudos e derruba o nível). A acústica é **derivada do modelo**, não
-  de rótulos à mão. A/B real: `scripts/ab_spatial.py` (oclusão −95% de agudos entre
-  cômodos; cauda de reverb varia 6× mais por cômodo, sem regressão de mix).
-
-**Material do foley (`k_nar/material.py`):**
-
-- Passo de **bota em madeira** ≠ **chinelo em concreto**: o K-NAR lê o material
-  (superfície + calçado) na prosa e ajusta **timbre** (materiais macios abafam) e
-  **nível** (bota soca, chinelo é discreto). Vale p/ qualquer foley, não só passos.
-- **Nível por categoria**: foley (passos) senta mais baixo que um impacto (tiro) —
-  não vão mais todos ao mesmo volume.
-
-**Elenco de vozes por aparência (`k_nar/casting.py`):**
-
-- O K-NAR **infere idade/gênero/timbre** de cada personagem dos **descritores** na prosa
-  ("o velho de voz rouca" → grave e lento; "a menina" → agudo e ágil) e escolhe a voz
-  (pitch/ritmo sobre o modelo base). Sem descritor → voz neutra; o gênero vem do texto,
-  nunca de adivinhar pelo nome.
-
-**Pessoa narrativa (`k_nar/narrative/person.py`):**
-
-- **3ª pessoa** — narrador onisciente, voz própria e **seca** (fora da cena). **1ª pessoa**
-  — a narração É o protagonista: **mesma voz** das falas dele e **dentro da cena** (leva o
-  eco do cômodo). Detectado da narração (`pessoa: auto`) ou fixo no front-matter.
-
-**Atuação — os personagens *performam* (`k_nar/emotion.py`, `k_nar/narrative/acting.py`):**
-
-- O K-NAR **infere a emoção de cada linha** (pontuação, palavras de emoção, o verbo de
-  fala, o **clima da cena** que sobe no suspense, e a **reação** à linha anterior) e a
-  atua via `EmotionPolicy` — ritmo, tom, tremor, ganho e **pausas**. Medo = agudo/rápido/
-  trêmulo; raiva = grave/forte/alto; tristeza = lento/baixo. Cada personagem tem um
-  **temperamento** (o veterano calmo × o novato nervoso) que enviesa a atuação.
-
-**Cômodo mobiliado × vazio (`k_nar/space/`):**
-
-- Um cômodo **mobiliado e em uso é seco** (a mobília absorve) — nada de "eco de caverna"
-  num escritório. Só um espaço **vazio/nu/em reforma** ecoa. O K-NAR lê os móveis e as
-  pistas de vazio na prosa e ajusta a absorção (`Zone.damping`).
-
-**Voz de ALTA qualidade — XTTS (`k_nar/tts/xtts.py`, opt-in):**
-
-- `--voz xtts` troca o Piper pelo **XTTS-v2** (timbre muito mais natural, prosódia viva),
-  com voz por personagem via locutor de estúdio + a mesma `EmotionPolicy`. É **lento**
-  (segundos/frase; requer `coqui-tts` + `torch`) — opt-in. O Piper segue o padrão rápido.
-
-**Entrega sob limite de tamanho (`scripts/package_audio.py`):**
-
-- Audiobook longo em qualidade máxima → **Opus** (metade do tamanho do MP3 na mesma
-  qualidade); se ainda passar do limite, **divide em partes** (cortando no silêncio),
-  cada uma sob o teto. Zip/rar não serve (áudio já é comprimido).
-
-Roadmap em [`docs/ROADMAP.md`](docs/ROADMAP.md); detalhes das fases em
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-## Usar (história → audiobook)
-
-Escreva a história num `.md`/`.txt` (formato em [`docs/TEMPLATE.md`](docs/TEMPLATE.md)) e rode a CLI:
+## Instalar e usar
 
 ```bash
-scripts/setup.sh                     # deps (numpy + pedalboard + piper + onnx) + voz PT
-scripts/download_lang.sh en          # (opcional) voz de outro idioma: en | es
+scripts/setup.sh --xtts        # numpy + coqui-tts + torch (o modelo ~1.8GB baixa no 1º uso)
 
-python -m k_nar examples/historia_template.md          # -> examples/historia_template.wav
-python -m k_nar examples/casa_de_madeira.md            # anda por 4 cômodos (espacial)
-python -m k_nar minha_historia.md -o audiobook.wav
-python -m k_nar minha_historia.md --sem-narrador       # modo radiodrama (só vozes + sons)
-python -m k_nar minha_historia.md --pessoa primeira    # narração na voz do protagonista
-python -m k_nar minha_historia.md --sem-espaco         # desliga o reverb por cômodo
-python -m k_nar minha_historia.md --idioma en          # pt | en | es (sobrescreve o front-matter)
-python -m k_nar minha_historia.md --sons sounds/       # samples reais (sounds/manifest.json)
+python -m k_nar roteiro.txt                          # -> roteiro.wav
+python -m k_nar roteiro.txt -o narracao.wav
+python -m k_nar roteiro.txt --velocidade 1.1         # acelera a leitura
+python -m k_nar roteiro.txt --locutor "Ana Florence" # troca o locutor de estúdio
+python -m k_nar roteiro.txt --voz-ref minha_voz.wav  # CLONA a sua voz de um sample
+python -m k_nar roteiro.txt --idioma en              # pt | en | es
+python -m k_nar roteiro.txt --formato opus           # entrega comprimida (.ogg), sob limite
+python -m k_nar roteiro.txt --motor formante         # rascunho offline (sem torch)
 ```
 
-O front-matter define título, idioma, narrador (sim/não), **pessoa** (1ª/3ª) e
-ambientação; nada é obrigatório (um `.md` só com prosa funciona). Modelos prontos:
-`examples/template_terceira_pessoa.md` e `examples/template_primeira_pessoa.md`.
-Multi-idioma: **pt / en / es**.
+O roteiro é um `.txt`/`.md`: **só o texto a narrar**, um parágrafo por bloco.
+Cabeçalhos de Markdown (`# ...`) e comentários (`<!-- ... -->`) são ignorados — use-os
+para se organizar sem que entrem no áudio. Front-matter opcional define título, idioma,
+voz e ritmo. Formato completo em [`docs/TEMPLATE.md`](docs/TEMPLATE.md); exemplo em
+[`examples/roteiro_yt_exemplo.txt`](examples/roteiro_yt_exemplo.txt).
+
+## A voz
+
+Duas formas de escolher (XTTS-v2, local e privado):
+
+- **Locutor de estúdio** — `--locutor "Dionisio Schuyler"` (ou no front-matter). O XTTS
+  traz vários timbres masc./fem.
+- **A sua própria voz** — `--voz-ref minha_voz.wav` clona o timbre de um sample curto
+  (6–20s). É o "narrador privado" de verdade: sua voz, sem nada sair da máquina.
+
+A leitura é **neutra por design** — o narrador não "atua". A única alavanca de
+performance é `--velocidade`.
 
 ## Interface web (GitHub Pages + Actions)
 
-Usuários geram audiobooks **sem instalar nada**:
+Gerar sem instalar nada:
 
-1. Abrem a **página** (GitHub Pages: `docs/index.html`) — escrevem a história, escolhem
-   idioma e narrador on/off, e clicam em *Gerar*.
-2. O botão abre um **issue já preenchido** (formulário `🎧 Gerar audiobook`).
-3. A **GitHub Action** (`.github/workflows/audiobook.yml`) renderiza a história e
-   comenta no issue o link para baixar o `audiobook.wav`.
+1. Abra a **página** ([`docs/index.html`](docs/index.html) via GitHub Pages) — cole o
+   roteiro, escolha o idioma e clique em *Gerar narração*.
+2. O botão abre um **issue já preenchido** (formulário `🎙️ Gerar narração`).
+3. A **GitHub Action** ([`.github/workflows/narrar.yml`](.github/workflows/narrar.yml))
+   narra o roteiro e comenta no issue o link para baixar o `narracao.wav`.
 
 Para ativar no seu fork (uma vez): **Settings → Actions** (habilitar workflows) e
-**Settings → Pages → Source: `main` / `/docs`**. Ajuste `REPO` no topo do
-`<script>` em `docs/index.html` se o fork tiver outro nome. Também dá para rodar o
-workflow manualmente em **Actions → audiobook → Run workflow**.
+**Settings → Pages → Source: `main` / `/docs`**. Ajuste `REPO` no topo do `<script>`
+em `docs/index.html` se o fork tiver outro nome.
 
-## Rodar os exemplos
+## Arquitetura (enxuta)
+
+| Módulo | Papel |
+|---|---|
+| `k_nar/script.py` | Lê o roteiro: front-matter (`chave: valor`, stdlib) + limpeza de Markdown. |
+| `k_nar/narrator.py` | Os 3 passos: `segment_script`, `assemble`, `narrate` + o factory de voz (`build_backend`). |
+| `k_nar/models.py` | `SpeechEvent`/`VoiceParams` — o contrato mínimo que o motor de voz consome. |
+| `k_nar/tts/base.py` | `TTSBackend` (Protocol agnóstico) + `RenderedClip` (com a duração real medida). |
+| `k_nar/tts/xtts.py` | `XTTSBackend`: voz neural XTTS-v2 (locutor de estúdio ou clonagem). Imports pesados são tardios. |
+| `k_nar/tts/cache.py` | `CachingTTS`: cache em disco por conteúdo — reeditar uma frase não re-sintetiza o resto. |
+| `k_nar/tts/batch.py` | `synthesize_all`: síntese em paralelo (pool de threads). |
+| `k_nar/render/trim.py` | `TrimmedTTS`: remove o padding de silêncio antes de medir a duração. |
+| `k_nar/render/voice.py` | `FormantTTSBackend`: voz sintética de rascunho (offline, sem torch). |
+| `k_nar/prosody.py` / `emotion.py` | Matrizes de prosódia/emoção, instanciadas **neutras** no narrador (existem para uma futura leitura expressiva). |
+| `scripts/package_audio.py` | Entrega sob limite de tamanho: Opus/MP3, dividindo no silêncio se preciso. |
+
+A segmentação e a leitura do roteiro são **stdlib puro**; `numpy` só é exigida na
+montagem do áudio, e o XTTS (torch/coqui) é carregado sob demanda.
+
+## Limitações honestas
+
+- **XTTS em CPU é lento** (segundos por frase) e baixa ~1.8GB no 1º uso. Para roteiros
+  longos, conte tempo — ou rode numa máquina com GPU. O cache evita re-sintetizar o que
+  não mudou.
+- **`--motor formante` é rascunho**, não voz de verdade: serve para conferir ritmo,
+  pausas e segmentação sem baixar nada. Não use no produto final.
+- A **qualidade final é a do XTTS-v2**. É bom, mas não é ElevenLabs; avalie com o seu
+  ouvido antes de publicar.
+
+## Testes
 
 ```bash
-# core: imprime a linha de tempo (sem dependencias)
-python -m examples.run_mvp
-
-# instalar deps de DSP (e opcionalmente o LLM local)
-scripts/setup.sh            # numpy + pedalboard
-scripts/setup.sh --llm      # + llama-cpp-python + baixa o modelo (~1.1GB)
-
-# gerar AUDIO da cena (naive / dry / full) em build_audio/
-python -m examples.render_scene
-
-# pipeline COMPLETO: roteiro cru -> Director -> Orquestrador -> audio
-python -m examples.direct_and_render                 # Director por regras
-python -m examples.direct_and_render examples/roteiro_exemplo.json --llm   # Director LLM
-
-# pipeline NEURAL: voz Piper real + cache + sintese paralela + forced alignment
-python -m examples.render_neural                 # Director por regras
-python -m examples.render_neural roteiro.json --llm   # Director LLM (few-shot)
-
-# voz DISTINTA por personagem (faber+jeff) + relatorio de QA acustico
-scripts/download_piper.sh jeff                    # segunda voz real
-python -m examples.multivoice_qa
-
-# HISTORIA em prosa -> AUDIODRAMA (vozes + SFX + ambiencia + ducking)
-python -m examples.story_to_audio                 # usa examples/historia_sonora.txt
-python -m examples.story_to_audio minha_historia.txt
-python -m examples.story_to_audio --sem-narrador  # modo radiodrama (so vozes + sons)
-
-# cena narrada (narrador + personagens em trilhas separadas)
-python -m examples.narrated_scene
-
-# provas: trim + crossfade | expressividade (mesma frase em 4 tensoes)
-python -m examples.proof_dsp
-python -m examples.proof_prosody
-
-# testes (core + DSP + Director; os de DSP pulam se numpy faltar)
+pip install numpy
 python -m unittest discover -s tests -v
 ```
 
-## Contrato JSON (saída do LLM — PASSAGEM 1)
-
-```json
-{
-  "cena_id": "ponte_comando_01",
-  "ambientacao": "cockpit_metalico_eco",
-  "eventos": [
-    {
-      "id": "fala_1",
-      "personagem": "Alien A",
-      "texto": "O nucleo nao deve ser ativado.",
-      "voz":     { "tensao": "alta", "velocidade": 0.85, "tom": -0.1 },
-      "entrada": { "tipo": "sequencial" },
-      "saida":   { "pausa": "curta" },
-      "palco":   { "estereo": -30 }
-    },
-    {
-      "id": "fala_2",
-      "personagem": "Alien B",
-      "texto": "Voce teme o inevitavel!",
-      "voz":     { "tensao": "extrema", "velocidade": 1.1 },
-      "entrada": { "tipo": "interrupcao", "agressividade": 0.25 },
-      "saida":   { "pausa": "media" },
-      "palco":   { "estereo": 20 }
-    }
-  ]
-}
-```
+Os testes usam o motor `formante` (offline) — não baixam torch/XTTS. A CI roda a suíte
+a cada push/PR.

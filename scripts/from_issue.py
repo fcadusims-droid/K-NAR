@@ -1,11 +1,10 @@
-"""Monta uma história (`story.md`) a partir de um GitHub Issue Form ou de inputs de
-workflow_dispatch. Chamado pela GitHub Action.
+"""Monta um roteiro (`roteiro.md`) a partir de um GitHub Issue Form ou de inputs de
+workflow_dispatch. Chamado pela GitHub Action do narrador.
 
 Issue Form: o corpo vem em `ISSUE_BODY`, com seções `### <rótulo>` (Título, Idioma,
-Narrador, História). workflow_dispatch: os campos vêm em WD_STORY/WD_LANG/WD_NARR.
+Roteiro). workflow_dispatch: os campos vêm em WD_TITLE/WD_LANG/WD_SCRIPT.
 
-Escreve `story.md` (front-matter + prosa) e `run_lang.txt` (idioma resolvido, p/ o
-download da voz). Stdlib puro.
+Escreve `roteiro.md` (front-matter + texto). Stdlib puro.
 """
 
 from __future__ import annotations
@@ -48,31 +47,25 @@ def main() -> None:
     body = os.environ.get("ISSUE_BODY", "")
     if body:
         f = _parse_issue_form(body)
-        title = _pick(f, "titulo", "title") or "historia"
+        title = _pick(f, "titulo", "title") or "narracao"
         lang = _pick(f, "idioma", "language", "lang") or "pt"
-        narrador_raw = _pick(f, "narrador", "narrator")
-        story = _pick(f, "historia", "story", "texto")
+        script = _pick(f, "roteiro", "script", "texto", "text")
     else:
-        title = os.environ.get("WD_TITLE", "historia") or "historia"
+        title = os.environ.get("WD_TITLE", "narracao") or "narracao"
         lang = os.environ.get("WD_LANG", "pt") or "pt"
-        narrador_raw = os.environ.get("WD_NARR", "com")
-        story = os.environ.get("WD_STORY", "")
+        script = os.environ.get("WD_SCRIPT", "")
 
     lang = _norm(lang).split("_")[0].split("-")[0]
     if lang not in _LANGS:
         lang = "pt"
-    narrador = "nao" if "sem" in _norm(narrador_raw) or _norm(narrador_raw) in ("nao", "no", "false") else "sim"
 
-    if not story.strip():
-        raise SystemExit("erro: história vazia")
+    if not script.strip():
+        raise SystemExit("erro: roteiro vazio")
 
-    front = (f"---\ntitulo: {title}\nidioma: {lang}\nnarrador: {narrador}\n---\n\n")
-    with open("story.md", "w", encoding="utf-8") as fh:
-        fh.write(front + story.strip() + "\n")
-    with open("run_lang.txt", "w", encoding="utf-8") as fh:
-        fh.write(lang)
-    print(f"[from_issue] titulo={title!r} idioma={lang} narrador={narrador} "
-          f"({len(story)} chars)")
+    front = f"---\ntitulo: {title}\nidioma: {lang}\n---\n\n"
+    with open("roteiro.md", "w", encoding="utf-8") as fh:
+        fh.write(front + script.strip() + "\n")
+    print(f"[from_issue] titulo={title!r} idioma={lang} ({len(script)} chars)")
 
 
 if __name__ == "__main__":

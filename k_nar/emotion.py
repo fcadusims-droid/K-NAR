@@ -1,14 +1,12 @@
-"""EmotionPolicy — a matriz EMOÇÃO → atuação acústica (irmã da ProsodyPolicy).
+"""EmotionPolicy — a matriz EMOÇÃO → gesto vocal (composta pela ProsodyPolicy).
 
-O ponto cego que isto resolve: hoje a única alavanca de expressividade é a "tensão"
-(um eixo de excitação). Duas falas com a mesma tensão soam iguais, mesmo que uma seja
-de MEDO (aguda, trêmula, contida) e a outra de RAIVA (grave, forte, alta). O Piper é
-surdo à emoção, então TODA a atuação tem de ser sintetizada por nós.
+Dá a cada emoção um "gesto vocal": um deslocamento de ritmo, pitch, variação de
+entonação, ganho e pausas, aplicado POR CIMA da prosódia. Recebe (emoção, intensidade)
+e resolve os manipuladores acústicos.
 
-Esta política dá a cada emoção um "gesto vocal": um deslocamento de ritmo, pitch,
-variação de entonação, ganho e pausas, aplicado POR CIMA da prosódia de tensão. É o
-mesmo espírito de duas passagens — o Director/LLM diz a INTENÇÃO (emoção + intensidade),
-e esta matriz resolve os manipuladores. Afinar a atuação do drama = mexer só aqui.
+No NARRADOR esta matriz fica em repouso: cada frase entra como "neutro", então o gesto
+é zero e a leitura sai fiel ao texto. Ela existe porque o motor de voz compartilha o
+mesmo contrato de prosódia — é o ponto único caso um dia se queira leitura expressiva.
 """
 
 from __future__ import annotations

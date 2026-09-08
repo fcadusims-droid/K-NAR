@@ -7,20 +7,12 @@ dist/
 .venv/
 venv/
 .pytest_cache/
+# áudio gerado (nunca versionado)
 *.wav
 *.mp3
+*.ogg
 *.flac
-build_audio/
+# cache de síntese (reproduzível)
 .knar_cache/
-# pesos de modelo: reproduzidos por script, nunca versionados (GitHub limita 100MB)
-*.gguf
-*.onnx
-*.onnx.json
-models/**
-!models/README.md
-.DS_Store
-sounds/
-*.mp3
-scratch_ab/
-*.mp3
 .knar_cache_xtts/
+.DS_Store

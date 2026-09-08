@@ -1,70 +1,47 @@
-"""K-NAR — Motor de Performance Dramática (áudio drama autônomo).
+"""K-NAR — um NARRADOR privado para conteúdo de redes sociais.
 
-Fluxo de duas passagens, orientado a linha de tempo:
-    LLM (intenção relativa) -> TTS (duração real) -> Orquestrador (Timeline/EDL).
+Você manda um roteiro (o texto de um vídeo/post) e o K-NAR devolve o áudio completo,
+narrado por uma voz só, fiel ao texto — sem inventar som, trilha ou "atuação". A voz
+sai de um motor neural local (XTTS-v2), então nada do seu roteiro precisa sair da sua
+máquina.
 
-O core é stdlib puro: nenhuma dependência de áudio para calcular o ritmo.
+    from k_nar import load_script, narrate_script
+    script = load_script("roteiro.txt")
+    res = narrate_script(script, engine="xtts")   # ou "formante" (rascunho offline)
+    res.write_wav("narracao.wav")
+
+O núcleo (segmentação do roteiro, leitura do front-matter) é stdlib puro; numpy só é
+exigida na montagem do áudio, e o motor XTTS (torch/coqui) é carregado sob demanda.
 """
 
-from k_nar.align import Alignment, PhonemeSpan
-from k_nar.models import (
-    AmbienceEvent,
-    DramaticPause,
-    EntryDynamics,
-    EntryType,
-    Event,
-    ExitDynamics,
-    NarrationEvent,
-    Scene,
-    SfxEvent,
-    SpeechEvent,
-    Track,
-    VoiceParams,
-    build_event,
+from k_nar.models import SpeechEvent, VoiceParams
+from k_nar.narrator import (
+    NarrationConfig,
+    NarrationResult,
+    Segment,
+    build_backend,
+    narrate,
+    narrate_script,
+    segment_script,
 )
-from k_nar.mixpolicy import MixPolicy
-from k_nar.orchestrator import Orquestrador
-from k_nar.prosody import Prosody, ProsodyPolicy
-from k_nar.proximity import ProximityPolicy
-from k_nar.qa import QAIssue, check_mix, check_timeline, format_report
-from k_nar.schema import SchemaError, validate_scene
-from k_nar.timeline import Placement, Timeline, TimingPolicy
+from k_nar.script import Script, load_script, parse_script
 from k_nar.tts.base import RenderedClip, TTSBackend
-from k_nar.tts.mock import MockTTSBackend
 
 __all__ = [
-    "Alignment",
-    "AmbienceEvent",
-    "DramaticPause",
-    "EntryDynamics",
-    "EntryType",
-    "Event",
-    "ExitDynamics",
-    "MixPolicy",
-    "MockTTSBackend",
-    "NarrationEvent",
-    "SfxEvent",
-    "Orquestrador",
-    "Placement",
-    "PhonemeSpan",
-    "Prosody",
-    "ProsodyPolicy",
-    "ProximityPolicy",
-    "QAIssue",
+    "NarrationConfig",
+    "NarrationResult",
     "RenderedClip",
-    "Scene",
-    "SchemaError",
+    "Script",
+    "Segment",
     "SpeechEvent",
     "TTSBackend",
-    "Timeline",
-    "TimingPolicy",
-    "Track",
     "VoiceParams",
-    "build_event",
-    "check_mix",
-    "check_timeline",
-    "format_report",
-    "validate_scene",
+    "build_backend",
+    "load_script",
+    "narrate",
+    "narrate_script",
+    "parse_script",
+    "segment_script",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

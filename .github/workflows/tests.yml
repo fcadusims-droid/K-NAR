@@ -13,9 +13,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      # O core e stdlib puro; numpy+pedalboard cobrem os testes de DSP/QA/render.
-      # Nenhum modelo Piper e baixado: os testes usam mock/formante.
+      # A segmentação e a leitura de roteiro são stdlib; numpy cobre a montagem do
+      # áudio. Os testes usam o motor 'formante' (offline) — nada de torch/XTTS.
       - name: Instala deps de teste
-        run: pip install numpy pedalboard
+        run: pip install numpy
       - name: Roda a suite
         run: python -m unittest discover -s tests -v

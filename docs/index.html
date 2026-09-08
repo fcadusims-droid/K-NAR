@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>K-NAR — sua história vira audiobook</title>
+<title>K-NAR — seu roteiro vira narração</title>
 <style>
   :root{
     --bg:#0f1115; --panel:#171a21; --edge:#262b36; --ink:#e8eaed; --mut:#9aa4b2;
@@ -51,22 +51,22 @@
 <div class="wrap">
   <header>
     <p class="logo">K-<span>NAR</span></p>
-    <p class="tag">Sua história em texto vira um <b>audiobook dramatizado</b> — vozes, efeitos e ambiência.</p>
+    <p class="tag">Seu <b>roteiro</b> vira um arquivo de <b>áudio narrado</b> — voz natural, fiel ao texto, pronto pro vídeo.</p>
   </header>
 
   <div class="card">
     <h2>Como funciona</h2>
     <div class="steps">
-      <div><b>1. Escreva</b>Diálogos entre aspas; sons e cenários viram efeitos e ambiência.</div>
+      <div><b>1. Cole</b>O roteiro do seu vídeo/post — só o texto a narrar.</div>
       <div><b>2. Envie</b>O botão abre um issue já preenchido — é só confirmar.</div>
-      <div><b>3. Baixe</b>O K-NAR gera o áudio e comenta o link no seu issue.</div>
+      <div><b>3. Baixe</b>O K-NAR narra e comenta no issue o link do áudio.</div>
     </div>
   </div>
 
   <form class="card" id="form" onsubmit="return gerar(event)">
-    <h2>Sua história</h2>
+    <h2>Seu roteiro</h2>
     <label for="titulo">Título</label>
-    <input type="text" id="titulo" placeholder="A Ponte de Comando" required>
+    <input type="text" id="titulo" placeholder="Como o algoritmo do YouTube funciona" required>
 
     <div class="row">
       <div>
@@ -77,73 +77,55 @@
           <option value="es">Español</option>
         </select>
       </div>
-      <div>
-        <label>Narrador</label>
-        <div class="seg" id="narrSeg">
-          <button type="button" data-v="com" aria-pressed="true" onclick="setNarr('com')">Com narrador</button>
-          <button type="button" data-v="sem" aria-pressed="false" onclick="setNarr('sem')">Sem (radiodrama)</button>
-        </div>
-      </div>
     </div>
 
-    <label for="historia">História</label>
-    <textarea id="historia" required placeholder='A nave cortava o vazio, e o motor enchia a ponte. Uma porta rangeu.
-"Tem alguém aí?", perguntou a Comandante. Então um tiro disparou nas sombras.
-"Todos em posição!", ela gritou.'></textarea>
-    <p class="hint">Frases curtas de som (“Um trovão ecoou.”) viram efeitos; cenários (floresta, chuva, motor…) viram ambiência. Guia completo em <a id="tpl" href="#">docs/TEMPLATE.md</a>.</p>
+    <label for="roteiro">Roteiro</label>
+    <textarea id="roteiro" required placeholder='Todo mundo acha que sabe como o algoritmo funciona. Quase ninguém sabe.
 
-    <button class="go" type="submit">🎧 Gerar audiobook</button>
+Neste vídeo eu vou te mostrar os três sinais que realmente importam.'></textarea>
+    <p class="hint">O narrador lê o texto como está, na ordem — sem inventar som ou trilha. Formato e opções (voz, velocidade) em <a id="tpl" href="#">docs/TEMPLATE.md</a>.</p>
+
+    <button class="go" type="submit">🎙️ Gerar narração</button>
 
     <details>
       <summary>Preferir a linha de comando?</summary>
-      <p class="hint">Salve como <code>historia.md</code> e rode:</p>
-      <pre id="cli">python -m k_nar historia.md</pre>
+      <p class="hint">Salve como <code>roteiro.txt</code> e rode:</p>
+      <pre id="cli">python -m k_nar roteiro.txt</pre>
     </details>
   </form>
 
   <footer>
-    Motor open-source de performance dramática. <a id="repo" href="#">Repositório no GitHub</a>.
+    Narrador open-source para criadores de conteúdo. <a id="repo" href="#">Repositório no GitHub</a>.
   </footer>
 </div>
 
 <script>
   // Ajuste se fizer fork: "owner/repo".
   var REPO = "fcadusims-droid/K-NAR";
-  var narr = "com";
 
   document.getElementById("repo").href = "https://github.com/" + REPO;
   document.getElementById("tpl").href = "https://github.com/" + REPO + "/blob/main/docs/TEMPLATE.md";
 
-  function setNarr(v){
-    narr = v;
-    document.querySelectorAll("#narrSeg button").forEach(function(b){
-      b.setAttribute("aria-pressed", b.dataset.v === v ? "true" : "false");
-    });
-    refreshCli();
-  }
   function refreshCli(){
-    var flag = narr === "sem" ? " --sem-narrador" : "";
     var lang = document.getElementById("idioma").value;
     var lf = lang === "pt" ? "" : " --idioma " + lang;
-    document.getElementById("cli").textContent = "python -m k_nar historia.md" + flag + lf;
+    document.getElementById("cli").textContent = "python -m k_nar roteiro.txt" + lf;
   }
   document.getElementById("idioma").addEventListener("change", refreshCli);
 
   function gerar(e){
     e.preventDefault();
-    var titulo = document.getElementById("titulo").value.trim() || "historia";
+    var titulo = document.getElementById("titulo").value.trim() || "narracao";
     var idioma = document.getElementById("idioma").value;
-    var historia = document.getElementById("historia").value.trim();
-    var narrador = narr === "sem" ? "Sem narrador (radiodrama)" : "Com narrador";
-    if(!historia){ alert("Escreva sua história."); return false; }
+    var roteiro = document.getElementById("roteiro").value.trim();
+    if(!roteiro){ alert("Cole o seu roteiro."); return false; }
     var url = "https://github.com/" + REPO + "/issues/new?"
-      + "template=audiobook.yml"
-      + "&labels=audiobook"
-      + "&title=" + encodeURIComponent("[audiobook] " + titulo)
+      + "template=narracao.yml"
+      + "&labels=narracao"
+      + "&title=" + encodeURIComponent("[narracao] " + titulo)
       + "&titulo=" + encodeURIComponent(titulo)
       + "&idioma=" + encodeURIComponent(idioma)
-      + "&narrador=" + encodeURIComponent(narrador)
-      + "&historia=" + encodeURIComponent(historia);
+      + "&roteiro=" + encodeURIComponent(roteiro);
     window.open(url, "_blank");
     return false;
   }
