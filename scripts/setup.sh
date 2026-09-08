@@ -22,6 +22,8 @@ if [[ "${1:-}" == "--xtts" ]]; then
   echo "[setup]  - coqui-tts + transformers (4.x)..."
   pip install --quiet coqui-tts "transformers>=4.57,<5"
   echo "[setup]  ok. O modelo XTTS (~1.8GB) baixa no 1º uso."
+  echo "[setup]  obs: --voz-ref (clonagem) precisa de FFmpeg no sistema"
+  echo "[setup]       (Linux: apt-get install -y ffmpeg | macOS: brew install ffmpeg)."
 fi
 
 echo "[setup] ok. rode:  python -m unittest discover -s tests"
