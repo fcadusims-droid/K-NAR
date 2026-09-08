@@ -101,8 +101,11 @@ class XTTSBackend:
             return self._tts
         tts = _MODELS.get(self.MODEL)
         if tts is None:
-            from TTS.api import TTS  # import TARDIO (torch/coqui)
-            tts = TTS(self.MODEL, progress_bar=False)
+            import os
+            # Aceite NÃO-INTERATIVO da licença do XTTS: sem isto o coqui abre um prompt
+            # e trava em ambiente headless (CI, container, GitHub Action).
+            os.environ.setdefault("COQUI_TOS_AGREED", "1")
+            tts = self._construct_tts()
             _MODELS[self.MODEL] = tts
         self._tts = tts
         try:
@@ -111,11 +114,34 @@ class XTTSBackend:
             self._sr = 24000
         return tts
 
+    @classmethod
+    def _construct_tts(cls):
+        """Carrega o modelo XTTS, contornando o `weights_only=True` que o torch >= 2.6
+        passou a usar por padrão (quebra o unpickle do checkpoint do XTTS). O modelo vem
+        do próprio Coqui — confiável para uso local — então recarregamos permitindo o
+        pickle completo se o carregamento estrito falhar."""
+        from TTS.api import TTS  # import TARDIO (torch/coqui)
+        try:
+            return TTS(cls.MODEL, progress_bar=False)
+        except Exception as e:  # pragma: no cover - depende da versão do torch
+            msg = str(e).lower()
+            if not any(k in msg for k in ("weights_only", "unpickl", "safe_globals", "global")):
+                raise
+            import torch
+            _orig = torch.load
+            def _patched(*a, **k):
+                k["weights_only"] = False
+                return _orig(*a, **k)
+            torch.load = _patched
+            try:
+                return TTS(cls.MODEL, progress_bar=False)
+            finally:
+                torch.load = _orig
+
     def _default_speaker(self, tts) -> str | None:
         if self.speaker:
             return self.speaker
         # primeiro locutor de estúdio disponível (XTTS multi-speaker)
-        names = getattr(getattr(tts, "synthesizer", None), "tts_model", None)
         try:
             spk = list(tts.speakers) if getattr(tts, "speakers", None) else None
             return spk[0] if spk else None
