@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     except ImportError as e:
         print(f"erro: o motor '{args.motor}' precisa de dependências que faltam ({e}).\n"
-              f"      instale com: pip install coqui-tts torch   (ou use --motor formante)",
+              f"      instale com: scripts/setup.sh --xtts   (ou use --motor formante)",
               file=sys.stderr)
         return 1
 
@@ -89,8 +89,14 @@ def main(argv: list[str] | None = None) -> int:
         res.write_wav(out)
         outputs = [str(out)]
     else:
-        prefix = str(out.with_suffix(""))
-        outputs = res.package(prefix, fmt=args.formato, max_mb=args.max_mb)
+        try:
+            prefix = str(out.with_suffix(""))
+            outputs = res.package(prefix, fmt=args.formato, max_mb=args.max_mb)
+        except ImportError as e:
+            print(f"erro: o formato '{args.formato}' precisa de dependências que faltam ({e}).\n"
+                  f"      instale com: pip install soundfile lameenc   (ou use --formato wav)",
+                  file=sys.stderr)
+            return 1
 
     if not args.quiet:
         n = len(res.segments)

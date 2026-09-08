@@ -26,7 +26,7 @@ stand-in sintético (`formante`) para rascunho/testes sem baixar torch.
 ## Instalar e usar
 
 ```bash
-scripts/setup.sh --xtts        # numpy + coqui-tts + torch (o modelo ~1.8GB baixa no 1º uso)
+scripts/setup.sh --xtts        # torch/torchaudio (CPU) + coqui-tts (combo validado); modelo ~1.8GB no 1º uso
 
 python -m k_nar roteiro.txt                          # -> roteiro.wav
 python -m k_nar roteiro.txt -o narracao.wav
@@ -83,7 +83,7 @@ em `docs/index.html` se o fork tiver outro nome.
 | `k_nar/tts/base.py` | `TTSBackend` (Protocol agnóstico) + `RenderedClip` (com a duração real medida). |
 | `k_nar/tts/xtts.py` | `XTTSBackend`: voz neural XTTS-v2 (locutor de estúdio ou clonagem). Imports pesados são tardios. |
 | `k_nar/tts/cache.py` | `CachingTTS`: cache em disco por conteúdo — reeditar uma frase não re-sintetiza o resto. |
-| `k_nar/tts/batch.py` | `synthesize_all`: síntese em paralelo (pool de threads). |
+| `k_nar/tts/batch.py` | `synthesize_all`: sintetiza as frases (serial por padrão — o XTTS/torch não é thread-safe e já usa todos os núcleos por chamada; `workers>1` fica para backends que liberam o GIL). |
 | `k_nar/render/trim.py` | `TrimmedTTS`: remove o padding de silêncio antes de medir a duração. |
 | `k_nar/render/voice.py` | `FormantTTSBackend`: voz sintética de rascunho (offline, sem torch). |
 | `k_nar/prosody.py` / `emotion.py` | Matrizes de prosódia/emoção, instanciadas **neutras** no narrador (existem para uma futura leitura expressiva). |
