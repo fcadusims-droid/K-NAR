@@ -9,8 +9,7 @@ corpo em prosa comum — o texto que o narrador deve ler, na ordem, sem inventar
     locutor: Dionisio Schuyler   # locutor de estúdio do XTTS (opcional)
     voz_ref: minha_voz.wav       # OU clona a SUA voz de um sample (opcional)
     velocidade: 1.0              # 1.0 = neutro; 1.1 acelera; 0.9 desacelera
-    pausa_frase: 350             # ms de respiro entre frases
-    pausa_paragrafo: 750         # ms de respiro entre parágrafos
+    pausa_paragrafo: 700         # ms de silêncio entre parágrafos
     ---
 
     Todo mundo acha que sabe como o algoritmo funciona. Quase ninguém sabe.
@@ -106,8 +105,7 @@ class Script:
     voice_ref: str = ""
     # Ritmo da leitura.
     speed: float = 1.0
-    sentence_pause_ms: int = 350
-    paragraph_pause_ms: int = 750
+    paragraph_pause_ms: int = 700
 
     @property
     def slug(self) -> str:
@@ -128,8 +126,7 @@ def parse_script(text: str, *, default_lang: str = "pt", title: str = "") -> Scr
         locutor=meta.get("locutor", meta.get("speaker", "")).strip(),
         voice_ref=meta.get("voz_ref", meta.get("voice_ref", meta.get("ref", ""))).strip(),
         speed=_as_float(meta.get("velocidade", meta.get("speed", "1.0")), 1.0),
-        sentence_pause_ms=_as_int(meta.get("pausa_frase", meta.get("sentence_pause", "350")), 350),
-        paragraph_pause_ms=_as_int(meta.get("pausa_paragrafo", meta.get("paragraph_pause", "750")), 750),
+        paragraph_pause_ms=_as_int(meta.get("pausa_paragrafo", meta.get("paragraph_pause", "700")), 700),
     )
 
 

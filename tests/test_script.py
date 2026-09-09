@@ -14,7 +14,6 @@ class TestParseScript(unittest.TestCase):
             "locutor: Dionisio Schuyler\n"
             "voz_ref: minha_voz.wav\n"
             "velocidade: 1.2\n"
-            "pausa_frase: 300\n"
             "pausa_paragrafo: 900\n"
             "---\n"
             "Primeira frase. Segunda frase.\n"
@@ -25,7 +24,6 @@ class TestParseScript(unittest.TestCase):
         self.assertEqual(s.locutor, "Dionisio Schuyler")
         self.assertEqual(s.voice_ref, "minha_voz.wav")
         self.assertAlmostEqual(s.speed, 1.2)
-        self.assertEqual(s.sentence_pause_ms, 300)
         self.assertEqual(s.paragraph_pause_ms, 900)
         self.assertIn("Primeira frase", s.text)
 

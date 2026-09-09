@@ -16,8 +16,7 @@ idioma: pt                     # pt | en | es
 locutor: Dionisio Schuyler     # locutor de estúdio do XTTS (opcional)
 voz_ref: minha_voz.wav         # OU clona a SUA voz de um sample (opcional)
 velocidade: 1.0                # 1.0 neutro; 1.1 acelera; 0.9 desacelera
-pausa_frase: 350               # ms de respiro entre frases
-pausa_paragrafo: 750           # ms de respiro entre parágrafos
+pausa_paragrafo: 700           # ms de silêncio entre parágrafos
 ---
 
 Todo mundo acha que sabe como o algoritmo funciona. Quase ninguém sabe.
@@ -29,11 +28,12 @@ Defaults: `pt`, locutor padrão, velocidade `1.0`. Nada é obrigatório.
 
 ## Como o narrador lê o roteiro
 
-- **Um parágrafo por bloco** (separado por uma linha em branco). Entre parágrafos o
-  narrador dá um respiro maior (`pausa_paragrafo`); entre as frases de um parágrafo,
-  um respiro curto (`pausa_frase`).
-- **Frases** quebram na pontuação (`. ! ? …`). Abreviações comuns (`Sr.`, `Dr.`,
-  `etc.`) **não** cortam a frase.
+- **Um parágrafo por bloco** (separado por uma linha em branco). Cada parágrafo é
+  narrado inteiro, de uma vez — o motor de voz lê as frases com prosódia contínua
+  (a pausa ENTRE as frases é dele). Entre parágrafos entra um silêncio (`pausa_paragrafo`).
+- **Pontuação:** os sinais dentro do parágrafo guiam a leitura do motor; a pontuação no
+  FIM de cada parágrafo é removida antes de sintetizar (o XTTS tende a "falar" a
+  pontuação no fim de um trecho). Ou seja: escreva normalmente, com pontos e vírgulas.
 - **É lido como está.** O narrador não interpreta personagens nem emoção — a voz sai
   neutra e fiel. Se quiser mais rápido/devagar, use `velocidade`.
 
