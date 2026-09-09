@@ -29,11 +29,15 @@ from pathlib import Path
 from k_nar.models import SpeechEvent, VoiceParams
 from k_nar.tts.base import RenderedClip, TTSBackend
 
-# Fim de frase: ponto/interrogação/exclamação/reticências seguido de espaço. Abreviações
-# comuns (Sr., Dra., etc.) não devem cortar — mascaramos antes de segmentar.
-_SENT_SPLIT = re.compile(r"(?<=[.!?…])\s+")
-_ABBREV = ("sr", "sra", "srta", "dr", "dra", "prof", "profa", "etc", "ex",
-           "vs", "p.ex", "mr", "mrs", "ms", "vol", "pág", "pag", "fig")
+# Locutor de estúdio padrão do narrador (XTTS): voz MASCULINA, grave e calma — um
+# "narrador" de verdade, em vez do 1º locutor alfabético (que é feminino). Sobrescrevível
+# por --locutor / front-matter `locutor:`.
+XTTS_DEFAULT_SPEAKER = "Damien Black"
+
+# Pontuação terminal a remover do fim de cada bloco antes de sintetizar: o XTTS tende a
+# VOCALIZAR/artefatar a pontuação no fim de um trecho ("ponto", clique). Os pontos
+# INTERNOS ficam — dentro de um parágrafo o XTTS os trata como pausa natural, não palavra.
+_TERMINAL_PUNCT = re.compile(r"[\s.;:,…!?]+$")
 
 
 @dataclass
@@ -41,8 +45,8 @@ class NarrationConfig:
     """As alavancas de ritmo/nível da narração — o "estilo de leitura" num objeto só."""
 
     speed: float = 1.0             # 1.0 neutro; >1 acelera, <1 desacelera
-    sentence_pause_ms: int = 350   # respiro entre frases
-    paragraph_pause_ms: int = 750  # respiro maior entre parágrafos
+    paragraph_pause_ms: int = 700  # silêncio entre parágrafos (a pausa ENTRE frases é
+                                   # do próprio motor, que lê o parágrafo com prosódia contínua)
     lead_ms: int = 150             # silêncio no começo do arquivo
     tail_ms: int = 400             # silêncio no fim
     peak_dbfs: float = -1.0        # normalização de pico do arquivo final
@@ -50,7 +54,9 @@ class NarrationConfig:
 
 @dataclass
 class Segment:
-    """Uma frase a narrar + a pausa que a segue."""
+    """Um BLOCO a narrar (um parágrafo) + a pausa que o segue. Sintetizar o parágrafo
+    inteiro (e não frase a frase) dá prosódia natural e evita o artefato de pontuação
+    que o XTTS produz no fim de trechos curtos isolados."""
 
     id: str
     text: str
@@ -99,44 +105,29 @@ class NarrationResult:
 # ------------------------------------------------------------------------- #
 #  Passo 1 — segmentação                                                    #
 # ------------------------------------------------------------------------- #
-def _mask_abbrev(text: str) -> str:
-    """Troca o ponto de abreviações comuns por um sentinela, p/ não cortar a frase."""
-    for ab in _ABBREV:
-        text = re.sub(rf"(?i)\b({re.escape(ab)})\.", r"\1" + "\x00", text)
-    return text
-
-
-def _sentences(paragraph: str) -> list[str]:
-    masked = _mask_abbrev(paragraph)
-    out = []
-    for sent in _SENT_SPLIT.split(masked):
-        sent = sent.replace("\x00", ".").strip()
-        if sent:
-            out.append(sent)
-    return out
+def _strip_terminal(text: str) -> str:
+    """Remove pontuação/espaço no FIM do bloco (o que o XTTS tende a vocalizar). Os sinais
+    internos ficam — o motor lê o parágrafo com pausas naturais nos pontos internos."""
+    return _TERMINAL_PUNCT.sub("", text.strip())
 
 
 def segment_script(text: str, config: NarrationConfig | None = None) -> list[Segment]:
-    """Quebra o texto do roteiro em frases (pausa curta) agrupadas por parágrafo (pausa
-    maior). Uma quebra de linha em branco separa parágrafos; frases quebram na pontuação.
+    """Quebra o roteiro em BLOCOS = parágrafos (separados por linha em branco). Cada
+    bloco é sintetizado inteiro (prosódia contínua, sem o corte robótico frase a frase);
+    entre blocos entra uma pausa. A pontuação terminal de cada bloco é removida.
 
-    O texto já vem limpo de Markdown pelo leitor de roteiro; aqui só decidimos as pausas.
+    O texto já vem limpo de Markdown pelo leitor de roteiro.
     """
     config = config or NarrationConfig()
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    paragraphs = [re.sub(r"\s+", " ", p).strip()
+                  for p in re.split(r"\n\s*\n", text) if p.strip()]
+    blocks = [_strip_terminal(p) for p in paragraphs]
+    blocks = [b for b in blocks if b]
     segments: list[Segment] = []
-    i = 0
-    for pi, para in enumerate(paragraphs):
-        # colapsa quebras internas do parágrafo (uma frase pode ter vindo em 2 linhas)
-        para = re.sub(r"\s+", " ", para)
-        sents = _sentences(para)
-        for si, sent in enumerate(sents):
-            last_in_para = si == len(sents) - 1
-            pause = config.paragraph_pause_ms if last_in_para else config.sentence_pause_ms
-            if pi == len(paragraphs) - 1 and last_in_para:
-                pause = 0  # a última frase não precisa de pausa (o tail cobre o fim)
-            segments.append(Segment(id=f"n{i:04d}", text=sent, pause_after_ms=pause))
-            i += 1
+    for i, block in enumerate(blocks):
+        last = i == len(blocks) - 1
+        segments.append(Segment(id=f"n{i:04d}", text=block,
+                                pause_after_ms=0 if last else config.paragraph_pause_ms))
     return segments
 
 
@@ -210,7 +201,9 @@ def build_backend(engine: str = "xtts", *, lang: str = "pt", locutor: str = "",
     neutral = ProsodyPolicy(length_scale_calm=1.0, length_scale_tense=1.0,
                             pitch_calm=0.0, pitch_tense=0.0)
     speaker_wavs = {"Narrador": voice_ref} if voice_ref else None
-    xtts = XTTSBackend(language=lang, speaker=(locutor or None),
+    # sem locutor nem clonagem → voz masculina padrão do narrador (não a 1ª alfabética).
+    speaker = locutor or (None if voice_ref else XTTS_DEFAULT_SPEAKER)
+    xtts = XTTSBackend(language=lang, speaker=speaker,
                        speaker_wavs=speaker_wavs, prosody=neutral)
     backend = CachingTTS(TrimmedTTS(xtts), cache_dir=cache_dir)
     backend.voice_kind = "xtts"
@@ -223,7 +216,6 @@ def narrate_script(script, *, engine: str = "xtts", cache_dir: str = ".knar_cach
     voz a partir das opções do roteiro e roda os três passos."""
     config = NarrationConfig(
         speed=script.speed,
-        sentence_pause_ms=script.sentence_pause_ms,
         paragraph_pause_ms=script.paragraph_pause_ms,
     )
     backend = build_backend(engine, lang=script.lang, locutor=script.locutor,

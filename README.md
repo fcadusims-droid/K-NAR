@@ -48,8 +48,9 @@ voz e ritmo. Formato completo em [`docs/TEMPLATE.md`](docs/TEMPLATE.md); exemplo
 
 Duas formas de escolher (XTTS-v2, local e privado):
 
-- **Locutor de estúdio** — `--locutor "Dionisio Schuyler"` (ou no front-matter). O XTTS
-  traz vários timbres masc./fem.
+- **Locutor de estúdio** — o padrão é uma **voz masculina** grave e calma (`Damien Black`);
+  troque com `--locutor "Nome"` (ou no front-matter). O XTTS traz ~58 timbres masc./fem.
+  (ex.: `Dionisio Schuyler`, `Aaron Dreschner`, `Ana Florence`).
 - **A sua própria voz** — `--voz-ref minha_voz.wav` clona o timbre de um sample curto
   (6–20s). É o "narrador privado" de verdade: sua voz, sem nada sair da máquina.
   Requer **FFmpeg** instalado (o torchaudio carrega o wav de referência por ele):
@@ -59,26 +60,38 @@ Duas formas de escolher (XTTS-v2, local e privado):
 A leitura é **neutra por design** — o narrador não "atua". A única alavanca de
 performance é `--velocidade`.
 
-## Interface web (GitHub Pages + Actions)
+## Site local (recomendado) — enviar `.md` e baixar o áudio
 
-Gerar sem instalar nada:
+Um site que roda **na sua máquina** (100% local, sem API, **sem limite de tamanho** de
+roteiro): você arrasta um `.md`/`.txt` e baixa o `.wav`.
 
-1. Abra a **página** ([`docs/index.html`](docs/index.html) via GitHub Pages) — cole o
-   roteiro, escolha o idioma e clique em *Gerar narração*.
-2. O botão abre um **issue já preenchido** (formulário `🎙️ Gerar narração`).
-3. A **GitHub Action** ([`.github/workflows/narrar.yml`](.github/workflows/narrar.yml))
-   narra o roteiro e comenta no issue o link para baixar o `narracao.wav`.
+```bash
+scripts/setup.sh --xtts        # uma vez
+python -m k_nar.web            # abre em http://127.0.0.1:8000
+```
 
-Para ativar no seu fork (uma vez): **Settings → Actions** (habilitar workflows) e
-**Settings → Pages → Source: `main` / `/docs`**. Ajuste `REPO` no topo do `<script>`
-em `docs/index.html` se o fork tiver outro nome.
+Simples e direto: escolha o arquivo, ajuste velocidade/idioma/locutor e clique em
+*Gerar narração*. O roteiro vai no corpo do POST (não numa URL), então **não há o limite
+de tamanho** do fluxo por issue. É o jeito certo para roteiros longos.
+
+## GitHub Pages + Actions (zero-install, com limite)
+
+A página estática ([`docs/index.html`](docs/index.html) via GitHub Pages) abre um
+**issue já preenchido**; a **Action** ([`.github/workflows/narrar.yml`](.github/workflows/narrar.yml))
+narra e comenta o link do `narracao.wav`. Não exige instalar nada, **mas**: GitHub Pages
+é estático (não roda o XTTS), então a síntese acontece na Action, e o roteiro trafega
+pelo issue — que tem **limite de tamanho**. Para roteiros grandes, use o site local acima.
+
+Ativar no fork (uma vez): **Settings → Actions** (habilitar workflows) e **Settings →
+Pages → Source: `main` / `/docs`**. Ajuste `REPO` no topo do `<script>` em `docs/index.html`.
 
 ## Arquitetura (enxuta)
 
 | Módulo | Papel |
 |---|---|
 | `k_nar/script.py` | Lê o roteiro: front-matter (`chave: valor`, stdlib) + limpeza de Markdown. |
-| `k_nar/narrator.py` | Os 3 passos: `segment_script`, `assemble`, `narrate` + o factory de voz (`build_backend`). |
+| `k_nar/narrator.py` | Os 3 passos: `segment_script` (por parágrafo), `assemble`, `narrate` + o factory de voz (`build_backend`). |
+| `k_nar/web.py` | Site LOCAL: sobe um servidor (`python -m k_nar.web`) p/ enviar `.md` e baixar o `.wav`, sem limite de tamanho. |
 | `k_nar/models.py` | `SpeechEvent`/`VoiceParams` — o contrato mínimo que o motor de voz consome. |
 | `k_nar/tts/base.py` | `TTSBackend` (Protocol agnóstico) + `RenderedClip` (com a duração real medida). |
 | `k_nar/tts/xtts.py` | `XTTSBackend`: voz neural XTTS-v2 (locutor de estúdio ou clonagem). Imports pesados são tardios. |

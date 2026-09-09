@@ -7,26 +7,27 @@ from k_nar.narrator import (NarrationConfig, build_backend, narrate,
 
 
 class TestSegmentation(unittest.TestCase):
-    def test_sentence_and_paragraph_pauses(self):
+    def test_paragraphs_are_blocks_with_pauses(self):
+        # dois parágrafos -> dois blocos; frases dentro do parágrafo NÃO viram blocos
+        # (o motor lê o parágrafo inteiro com prosódia contínua).
         text = "Frase um. Frase dois.\n\nOutro parágrafo."
-        cfg = NarrationConfig(sentence_pause_ms=300, paragraph_pause_ms=800)
+        cfg = NarrationConfig(paragraph_pause_ms=800)
         segs = segment_script(text, cfg)
         self.assertEqual([s.text for s in segs],
-                         ["Frase um.", "Frase dois.", "Outro parágrafo."])
-        # 1ª frase: pausa de frase; 2ª (fim do parágrafo): pausa de parágrafo;
-        # última frase do texto: sem pausa (o tail cobre o fim).
-        self.assertEqual(segs[0].pause_after_ms, 300)
-        self.assertEqual(segs[1].pause_after_ms, 800)
-        self.assertEqual(segs[2].pause_after_ms, 0)
+                         ["Frase um. Frase dois", "Outro parágrafo"])
+        self.assertEqual(segs[0].pause_after_ms, 800)  # pausa entre parágrafos
+        self.assertEqual(segs[1].pause_after_ms, 0)    # último: sem pausa (tail cobre)
 
-    def test_abbreviation_does_not_split(self):
-        segs = segment_script("O Dr. Silva chegou. Todos aplaudiram.")
-        self.assertEqual([s.text for s in segs],
-                         ["O Dr. Silva chegou.", "Todos aplaudiram."])
+    def test_terminal_punct_stripped_internal_kept(self):
+        # a pontuação do FIM do bloco sai (o XTTS a vocaliza); a interna fica.
+        segs = segment_script("O Dr. Silva chegou. Todos aplaudiram!")
+        self.assertEqual(len(segs), 1)
+        self.assertEqual(segs[0].text, "O Dr. Silva chegou. Todos aplaudiram")
 
     def test_ids_are_unique_and_ordered(self):
-        segs = segment_script("Uma. Duas.\n\nTrês.")
+        segs = segment_script("Um.\n\nDois.\n\nTrês.")
         ids = [s.id for s in segs]
+        self.assertEqual(len(ids), 3)
         self.assertEqual(len(ids), len(set(ids)))
         self.assertEqual(ids, sorted(ids))
 
@@ -45,12 +46,11 @@ class TestNarrateEndToEnd(unittest.TestCase):
 
     def test_produces_mono_audio(self):
         backend = build_backend("formante")
-        cfg = NarrationConfig(lead_ms=100, tail_ms=200, sentence_pause_ms=200,
-                              paragraph_pause_ms=500)
-        res = narrate("Primeira frase. Segunda frase.\n\nTerceira.", backend,
+        cfg = NarrationConfig(lead_ms=100, tail_ms=200, paragraph_pause_ms=500)
+        res = narrate("Primeiro parágrafo aqui.\n\nSegundo.\n\nTerceiro.", backend,
                       config=cfg, workers=1)
         self.assertEqual(res.voice_kind, "formante")
-        self.assertEqual(len(res.segments), 3)
+        self.assertEqual(len(res.segments), 3)  # 3 parágrafos -> 3 blocos
         self.assertGreater(res.duration_ms, 0)
         self.assertEqual(res.audio.ndim, 1)  # mono
 
